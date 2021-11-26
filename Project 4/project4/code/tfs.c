@@ -22,7 +22,7 @@
 #include <sys/time.h>
 #include <libgen.h>
 #include <limits.h>
-
+#include <stddef.h>
 #include "block.h"
 #include "tfs.h"
 
@@ -30,9 +30,34 @@ char diskfile_path[PATH_MAX];
 
 // Declare your in-memory data structures here
 
+struct superblock SuperBlock;
+bitmap_t* userbitmap;
+struct inode* InodeTable;
+struct inode* DataTable;
 /* 
  * Get available inode number from bitmap
  */
+void initSuperBlock(){
+	SuperBlock.magic_num = MAGIC_NUM;
+	SuperBlock.max_inum = MAX_INUM;
+	SuperBlock.max_dnum = MAX_DNUM;
+	SuperBlock.i_bitmap_blk = &SuperBlock+sizeof(struct superblock);
+	SuperBlock.d_bitmap_blk = &SuperBlock+sizeof(struct superblock)+sizeof(SuperBlock.i_bitmap_blk);
+
+	InodeTable = malloc(sizeof(struct inode) * SuperBlock.max_inum);
+	DataTable = malloc(sizeof(struct inode) * SuperBlock.max_dnum);
+
+	for(int i = 0; i < SuperBlock.max_inum; i++){
+		InodeTable[i].ino = i+1;
+		InodeTable[i].size = -1;
+		InodeTable[i].
+	}
+
+	
+}
+
+
+
 int get_avail_ino() {
 
 	// Step 1: Read inode bitmap from disk
@@ -82,7 +107,6 @@ int writei(uint16_t ino, struct inode *inode) {
 
 	return 0;
 }
-
 
 /* 
  * directory operations
@@ -135,6 +159,8 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
 
+	
+
 	return 0;
 }
 
@@ -168,6 +194,12 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 
   // Step 1b: If disk file is found, just initialize in-memory data structures
   // and read superblock from disk
+	#define FOUND 1
+	if(FOUND){ // THIS IS JUST PSUDOCODE
+
+	}else{
+
+	}
 
 	return NULL;
 }
@@ -198,6 +230,8 @@ static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
 	// Step 1: Call get_node_by_path() to get inode from path
 
 	// Step 2: If not find, return -1
+
+
 
     return 0;
 }
@@ -330,6 +364,7 @@ static int tfs_truncate(const char *path, off_t size) {
 static int tfs_release(const char *path, struct fuse_file_info *fi) {
 	// For this project, you don't need to fill this function
 	// But DO NOT DELETE IT!
+	
 	return 0;
 }
 
