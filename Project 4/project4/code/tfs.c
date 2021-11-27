@@ -62,11 +62,21 @@ int get_avail_ino() {
 
 	// Step 3: Update inode bitmap and write to disk
 
-
-	/* 
-		THIS IS WHERE DISK WRITING ENEDS TO BE DONE; 
+	/*
+		ONLY TEST CODE. BASICALLY DECENT PSUDOCODE FOR NOW.
 	*/
-	return;
+
+	bio_read(1, (void*) &SuperBlock);
+	InodeBitMap = SuperBlock.i_bitmap_blk;
+	for(int i = 0; i < MAGIC_NUM; i++){
+		if(InodeBitMap[i] == '0'){
+			set_bitmap(InodeBitMap, i);
+			bio_write(1, (void*)&SuperBlock);
+			return i;
+		}
+	}
+	
+	return 0;
 }
 
 /* 
@@ -79,6 +89,20 @@ int get_avail_blkno() {
 	// Step 2: Traverse data block bitmap to find an available slot
 
 	// Step 3: Update data block bitmap and write to disk 
+
+
+	/*
+		ONLY TEST CODE. BASICALLY DECENT PSUDOCODE FOR NOW.
+	*/
+	bio_read(1, (void*) &SuperBlock);
+	DataBlockBitMap = SuperBlock.d_bitmap_blk;
+	for(int i = 0; i < MAGIC_NUM; i++){
+		if(DataBlockBitMap[i] == '0'){
+			set_bitmap(DataBlockBitMap, i);
+			bio_write(1, (void*)&SuperBlock);
+			return i;
+		}
+	}
 
 	return 0;
 }
