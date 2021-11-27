@@ -31,44 +31,28 @@
 char diskfile_path[PATH_MAX];
 
 // Declare your in-memory data structures here
-
 struct superblock SuperBlock;
-bitmap_t* inode_bitmap;
-bitmap_t* data__bitmap;
-struct inode* InodeTable;
-struct inode* DataTable;
-/* 
- * Get available inode number from bitmap
- */
-void initSuperBlock(){
+bitmap_t InodeBitMap;
+bitmap_t DataBlockBitMap;
+struct inode* INodeTable;
+
+void SuperBlockInit(){
 	SuperBlock.magic_num = MAGIC_NUM;
 	SuperBlock.max_inum = MAX_INUM;
 	SuperBlock.max_dnum = MAX_DNUM;
+	SuperBlock.i_bitmap_blk = &InodeBitMap;
+	SuperBlock.d_bitmap_blk = &DataBlockBitMap;
 
-	InodeTable = malloc(sizeof(struct inode) * SuperBlock.max_inum);
-	DataTable = malloc(sizeof(struct inode) * SuperBlock.max_dnum);
-	SuperBlock.i_bitmap_blk = InodeTable;
-	SuperBlock.d_bitmap_blk = DataTable;
-	for(int i = 0; i < SuperBlock.max_inum; i++){
-		InodeTable[i].ino = i+1;
-		InodeTable[i].size = -1;
-		InodeTable[i].type = -1;
-		InodeTable[i].valid = 1;
-		InodeTable[i].link = 0;
-
+	INodeTable = malloc(sizeof(struct inode) * MAX_INUM);
+	for(int i = 0; i < MAX_INUM; i++){
+		INodeTable[i].size = -1;
+		INodeTable[i].valid = 1;
+		INodeTable[i].link = -1;
+		INodeTable[i].ino = i+1;
 	}
-	for(int i = 0; i < SuperBlock.max_dnum; i++){
-		DataTable[i].ino = i+1;
-		DataTable[i].size = -1;
-		DataTable[i].type = -1;
-		DataTable[i].valid = 1;
-		DataTable[i].link = 0;
-	}
-
-	
+	// Writes data to disk file. Not yet tested
+	bio_write(1, (void*)&SuperBlock);
 }
-
-
 
 int get_avail_ino() {
 
@@ -78,22 +62,11 @@ int get_avail_ino() {
 
 	// Step 3: Update inode bitmap and write to disk
 
-	#define SIZE_BITMAP 1000 // temp size
-	int available_index = -1;
-	for(int i = 1; i < SIZE_BITMAP;i++){
-		if(inode_bitmap[i] == '0'){
-			available_index = i;
-			break;
-		}
-	}
-
-	set_bitmap(inode_bitmap, available_index);
-
 
 	/* 
 		THIS IS WHERE DISK WRITING ENEDS TO BE DONE; 
 	*/
-	return available_index;
+	return;
 }
 
 /* 
@@ -106,22 +79,6 @@ int get_avail_blkno() {
 	// Step 2: Traverse data block bitmap to find an available slot
 
 	// Step 3: Update data block bitmap and write to disk 
-	#define SIZE_BITMAP 1000 // temp size
-	int available_index = -1;
-	for(int i = 1; i < SIZE_BITMAP;i++){
-		if(data__bitmap[i] == '0'){
-			available_index = i;
-			break;
-		}
-	}
-
-	set_bitmap(data__bitmap, available_index);
-
-
-	/* 
-		THIS IS WHERE DISK WRITING ENEDS TO BE DONE; 
-	*/
-	return available_index;
 
 	return 0;
 }
@@ -197,6 +154,7 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 
 /* 
  * namei operation
+ returning an INODE. But why is 
  */
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	
@@ -242,13 +200,12 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 
 	// Step 1a: If disk file is not found, call mkfs
 
-  // Step 1b: If disk file is found, just initialize in-memory data structures
-  // and read superblock from disk
-	#define FOUND 1
-	if(FOUND){ // THIS IS JUST PSUDOCODE
-
+  	// Step 1b: If disk file is found, just initialize in-memory data structures
+	
+	if(1){
+		// DISK FOUND
 	}else{
-
+		// Initialize the Blocks
 	}
 
 	return NULL;
