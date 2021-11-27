@@ -25,13 +25,16 @@
 #include <stddef.h>
 #include "block.h"
 #include "tfs.h"
+#include <string.h>
+
 
 char diskfile_path[PATH_MAX];
 
 // Declare your in-memory data structures here
 
 struct superblock SuperBlock;
-bitmap_t* userbitmap;
+bitmap_t* inode_bitmap;
+bitmap_t* data__bitmap;
 struct inode* InodeTable;
 struct inode* DataTable;
 /* 
@@ -41,16 +44,25 @@ void initSuperBlock(){
 	SuperBlock.magic_num = MAGIC_NUM;
 	SuperBlock.max_inum = MAX_INUM;
 	SuperBlock.max_dnum = MAX_DNUM;
-	SuperBlock.i_bitmap_blk = &SuperBlock+sizeof(struct superblock);
-	SuperBlock.d_bitmap_blk = &SuperBlock+sizeof(struct superblock)+sizeof(SuperBlock.i_bitmap_blk);
 
 	InodeTable = malloc(sizeof(struct inode) * SuperBlock.max_inum);
 	DataTable = malloc(sizeof(struct inode) * SuperBlock.max_dnum);
-
+	SuperBlock.i_bitmap_blk = InodeTable;
+	SuperBlock.d_bitmap_blk = DataTable;
 	for(int i = 0; i < SuperBlock.max_inum; i++){
 		InodeTable[i].ino = i+1;
 		InodeTable[i].size = -1;
-		InodeTable[i].
+		InodeTable[i].type = -1;
+		InodeTable[i].valid = 1;
+		InodeTable[i].link = 0;
+
+	}
+	for(int i = 0; i < SuperBlock.max_dnum; i++){
+		DataTable[i].ino = i+1;
+		DataTable[i].size = -1;
+		DataTable[i].type = -1;
+		DataTable[i].valid = 1;
+		DataTable[i].link = 0;
 	}
 
 	
@@ -64,9 +76,24 @@ int get_avail_ino() {
 	
 	// Step 2: Traverse inode bitmap to find an available slot
 
-	// Step 3: Update inode bitmap and write to disk 
+	// Step 3: Update inode bitmap and write to disk
 
-	return 0;
+	#define SIZE_BITMAP 1000 // temp size
+	int available_index = -1;
+	for(int i = 1; i < SIZE_BITMAP;i++){
+		if(inode_bitmap[i] == '0'){
+			available_index = i;
+			break;
+		}
+	}
+
+	set_bitmap(inode_bitmap, available_index);
+
+
+	/* 
+		THIS IS WHERE DISK WRITING ENEDS TO BE DONE; 
+	*/
+	return available_index;
 }
 
 /* 
@@ -79,6 +106,22 @@ int get_avail_blkno() {
 	// Step 2: Traverse data block bitmap to find an available slot
 
 	// Step 3: Update data block bitmap and write to disk 
+	#define SIZE_BITMAP 1000 // temp size
+	int available_index = -1;
+	for(int i = 1; i < SIZE_BITMAP;i++){
+		if(data__bitmap[i] == '0'){
+			available_index = i;
+			break;
+		}
+	}
+
+	set_bitmap(data__bitmap, available_index);
+
+
+	/* 
+		THIS IS WHERE DISK WRITING ENEDS TO BE DONE; 
+	*/
+	return available_index;
 
 	return 0;
 }
@@ -87,6 +130,7 @@ int get_avail_blkno() {
  * inode operations
  */
 int readi(uint16_t ino, struct inode *inode) {
+
 
   // Step 1: Get the inode's on-disk block number
 
@@ -158,8 +202,14 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
+	char *PathTokens = strtok(path, "/");
 
-	
+	// PATH WALKER. Can now find Inodes through here.
+	while(PathTokens != NULL){
+
+		PathTokens = strtok(NULL, "/");
+	}
+
 
 	return 0;
 }
