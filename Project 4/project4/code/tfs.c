@@ -50,8 +50,6 @@ void SuperBlockInit(){
 		INodeTable[i].link = -1;
 		INodeTable[i].ino = i+1;
 	}
-	// Writes data to disk file. Not yet tested
-	bio_write(1, (void*)&SuperBlock);
 }
 
 int get_avail_ino() {
@@ -202,9 +200,12 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 int tfs_mkfs() {
 
 	// Call dev_init() to initialize (Create) Diskfile
+	dev_init("/SuperBlock");
+	dev_open("/SuperBlock");
 
+	SuperBlockInit(); // Also initializes the inode and block bitmap
 	// write superblock information
-
+	bio_write(1, (void*)&SuperBlock);
 	// initialize inode bitmap
 
 	// initialize data block bitmap
@@ -228,7 +229,9 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 	
 	if(1){
 		// DISK FOUND
+		bio_read(1, (void*)&SuperBlock);
 	}else{
+		tfs_mkfs();
 		// Initialize the Blocks
 	}
 
