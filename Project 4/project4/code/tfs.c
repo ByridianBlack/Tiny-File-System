@@ -35,6 +35,7 @@ struct superblock SuperBlock;
 bitmap_t InodeBitMap;
 bitmap_t DataBlockBitMap;
 struct inode* INodeTable;
+struct data_block* data_region;
 
 void SuperBlockInit(){
 	SuperBlock.magic_num = MAGIC_NUM;
@@ -50,7 +51,14 @@ void SuperBlockInit(){
 		INodeTable[i].link = -1;
 		INodeTable[i].ino = i+1;
 	}
-}
+
+	data_region = malloc(sizeof(struct data_block) * MAX_DNUM);
+	for(int i = 0; i < MAX_DNUM; i++){
+		for(int j = 0; j < BLOCK_SIZE; j++){
+			data_region[i].data[j] = '0';
+		}
+	}
+} 
 
 int get_avail_ino() {
 

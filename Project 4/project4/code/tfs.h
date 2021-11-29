@@ -48,6 +48,9 @@ struct dirent {
 	char name[252];					/* name of the directory entry */
 };
 
+struct data_block{
+	char data[BLOCK_SIZE];
+}
 
 /*
  * bitmap operations
