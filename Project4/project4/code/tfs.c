@@ -187,10 +187,16 @@ int get_avail_blkno() {
 int readi(uint16_t ino, struct inode *inode) {
 
 
-	INodeTable = malloc(sizeof(struct inode) * 16);
+	INodeTable = calloc(0,sizeof(struct inode) * 16);
 
-	
+	int block_number = (ino * sizeof(struct inode)) / BLOCK_SIZE;
 
+	bio_read(block_number, (void*) &INodeTable);
+
+	int sector = ((block_number * BLOCK_SIZE) + SuperBlock.i_start_blk) / 16;
+
+	memcpy(&inode, &INodeTable[sector], sizeof(struct inode));
+	free(INodeTable);
   // Step 1: Get the inode's on-disk block number
 
   // Step 2: Get offset of the inode in the inode on-disk block
@@ -201,6 +207,20 @@ int readi(uint16_t ino, struct inode *inode) {
 }
 
 int writei(uint16_t ino, struct inode *inode) {
+
+
+	// INodeTable 
+
+	INodeTable = calloc(0,sizeof(struct inode) * 16);
+
+	int block_number = (ino * sizeof(struct inode)) / BLOCK_SIZE;
+	int sector = ((block_number * BLOCK_SIZE) + SuperBlock.i_start_blk) / 16;
+
+	bio_read(block_number, (void*) &INodeTable);
+
+	memcpy(&INodeTable[sector], &inode, sizeof(struct inode));
+	bio_write(block_number, (void*)&INodeTable);
+	free(INodeTable);
 
 	// Step 1: Get the block number where this inode resides on disk
 	
