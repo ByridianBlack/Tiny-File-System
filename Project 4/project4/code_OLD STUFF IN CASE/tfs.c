@@ -22,131 +22,68 @@
 #include <sys/time.h>
 #include <libgen.h>
 #include <limits.h>
-
+#include <stddef.h>
 #include "block.h"
 #include "tfs.h"
+#include <string.h>
+
 
 char diskfile_path[PATH_MAX];
 
+// Declare your in-memory data structures here
 struct superblock SuperBlock;
-bitmap_t DataBitMap;
-bitmap_t INodeBitMap;
+bitmap_t InodeBitMap;
+bitmap_t DataBlockBitMap;
 struct inode* INodeTable;
-
-
-/*
-
-	DATA REGION SHOULD BE THE SIZE OF 
-	32*1024*1024 - ((sizeof(SuperBlock) + Sizeof(DataBitMap) +sizeof(INodeBitMap)+ sizeof(INodeTable)))
-
-*/
+struct data_block* data_region;
 
 void SuperBlockInit(){
-
-
 	SuperBlock.magic_num = MAGIC_NUM;
-	SuperBlock.max_inum  = MAX_INUM;
-	SuperBlock.max_dnum  = MAX_DNUM;
-	SuperBlock.d_start_blk = 67; // START OF THE DATA REGION
-	SuperBlock.i_start_blk = 3;
-	SuperBlock.d_bitmap_blk = DataBitMap;
-	SuperBlock.i_bitmap_blk = INodeBitMap;
+	SuperBlock.max_inum = MAX_INUM;
+	SuperBlock.max_dnum = MAX_DNUM;
+	SuperBlock.i_bitmap_blk = &InodeBitMap;
+	SuperBlock.d_bitmap_blk = &DataBlockBitMap;
+	 
 
-	
-}
-
-
-void writeDataBlockBitMapInit(){
-
-	for(int i = 1; i < 33; i++){
-		DataBitMap  = calloc('0', sizeof(bitmap_t) * (MAX_DNUM/32));
-		bio_write(i, (void*)&DataBitMap);
-		free(DataBitMap);
+	INodeTable = malloc(sizeof(struct inode) * MAX_INUM);
+	for(int i = 0; i < MAX_INUM; i++){
+		INodeTable[i].size = -1;
+		INodeTable[i].valid = 1;
+		INodeTable[i].link = -1;
+		INodeTable[i].ino = i+1;
 	}
-}
 
-void writeInodeBitMapInit(){
-
-	for(int i = 33; i < 35; i++){
-		INodeBitMap = calloc('0', sizeof(bitmap_t) * (MAX_INUM/2));
-		bio_write(i, (void*)&INodeBitMap);
-		free(INodeBitMap);
-	}
-}
-
-
-void writeInodeTableInit(){
-
-	signed long accum = 0;
-	int ino = 0;
-	for(int i = 35; i < 99; i++){
-
-		INodeTable = malloc(sizeof(struct inode) * 16);
-
-		for(int j = 0; i < 16; j++){
-			INodeTable->ino = ino+1;
-			if(i == 1 || i == 2){
-				INodeTable->valid = -1;
-			}else{
-				INodeTable->valid = 1;
-			}
-			INodeTable->size = -1;
-			INodeTable->link = 0;
-			memset(&(INodeTable->vstat), 0, sizeof(struct stat));
-			memset(&(INodeTable->direct_ptr), 0, sizeof(int) * 16);
-			memset(&(INodeTable->indirect_ptr), 0, sizeof(int) * 8);
-			ino++;
+	data_region = malloc(sizeof(struct data_block) * MAX_DNUM);
+	for(int i = 0; i < MAX_DNUM; i++){
+		for(int j = 0; j < BLOCK_SIZE; j++){
+			data_region[i].data[j] = '0';
 		}
-
-		bio_write(i, (void*)&INodeTable);
-		free(INodeTable);
-
 	}
+} 
 
-}
-
-// Declare your in-memory data structures here
-/*
-
-	BECAUSE	OF THE NATURE OF THIS THE INDEX RETURN TREATS EACH BLOCK AS IF ITS ONE BLOCK. THEREFORE
-	THE INDEX RETURNED IS GOING TO BE OUT OF BOUNDS IF YOU SIMPLY USE IT TO EXTRACT INFORMATION 
-	OUT OF THE ARRAY. YOU MUST THEREFORE USE THE MODUS TO AVOID THIS. IF MORE QUESTIONS JUST MESSAGE
-	ME!
-
-	THESE RETURN -1 IF THERE IS NO AVAILBLE DATA REGION OR INODE. IDK HOW TO HANDLE THAT ERROR ANY OTHER
-	WAY.
-*/
-
-
-/* 
- * Get available inode number from bitmap
- */
 int get_avail_ino() {
 
 	// Step 1: Read inode bitmap from disk
-	int available_index = 0;
-	for(int i = 33; i < 35; i++){
-		INodeBitMap = calloc('0', sizeof(bitmap_t) * (MAX_INUM/2));
-		bio_read(i, (void*)&INodeBitMap);
-		for(int j = 0; j < MAX_INUM; j++){
-			
-			if(INodeBitMap[j] == '0'){
-				set_bitmap(INodeBitMap, '1');
-				
-				bio_write(i, (void*)&INodeBitMap);
-				free(INodeBitMap);
-				return available_index;
-
-			}
-			available_index++;
-
-		}
-	}
+	
 	// Step 2: Traverse inode bitmap to find an available slot
 
-	// Step 3: Update inode bitmap and write to disk 
+	// Step 3: Update inode bitmap and write to disk
 
-	return -1;
+	/*
+		ONLY TEST CODE. BASICALLY DECENT PSUDOCODE FOR NOW.
+	*/
+
+	bio_read(1, (void*) &SuperBlock);
+	InodeBitMap = SuperBlock.i_bitmap_blk;
+	for(int i = 0; i < MAGIC_NUM; i++){
+		if(InodeBitMap[i] == '0'){
+			set_bitmap(InodeBitMap, i);
+			bio_write(1, (void*)&SuperBlock);
+			return i;
+		}
+	}
+	
+	return 0;
 }
 
 /* 
@@ -154,31 +91,27 @@ int get_avail_ino() {
  */
 int get_avail_blkno() {
 
-
-	int available_index = 0;
-	for(int i = 1; i < 33; i++){
-		DataBitMap = calloc('0', sizeof(bitmap_t) * (MAX_DNUM/32));
-		bio_read(i, (void*)&DataBitMap);
-		for(int j = 0; j < MAX_INUM; j++){
-			
-			if(DataBitMap[j] == '0'){
-				set_bitmap(DataBitMap, '1');
-				
-				bio_write(i, (void*)&DataBitMap);
-				free(DataBitMap);
-				return available_index;
-			}
-			available_index++;
-		}
-	}
-
 	// Step 1: Read data block bitmap from disk
 	
 	// Step 2: Traverse data block bitmap to find an available slot
 
 	// Step 3: Update data block bitmap and write to disk 
 
-	return -1;
+
+	/*
+		ONLY TEST CODE. BASICALLY DECENT PSUDOCODE FOR NOW.
+	*/
+	bio_read(1, (void*) &SuperBlock);
+	DataBlockBitMap = SuperBlock.d_bitmap_blk;
+	for(int i = 0; i < MAGIC_NUM; i++){
+		if(DataBlockBitMap[i] == '0'){
+			set_bitmap(DataBlockBitMap, i);
+			bio_write(1, (void*)&SuperBlock);
+			return i;
+		}
+	}
+
+	return 0;
 }
 
 /* 
@@ -186,10 +119,6 @@ int get_avail_blkno() {
  */
 int readi(uint16_t ino, struct inode *inode) {
 
-
-	INodeTable = malloc(sizeof(struct inode) * 16);
-
-	
 
   // Step 1: Get the inode's on-disk block number
 
@@ -210,7 +139,6 @@ int writei(uint16_t ino, struct inode *inode) {
 
 	return 0;
 }
-
 
 /* 
  * directory operations
@@ -235,7 +163,6 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 
 	// Step 3: Add directory entry in dir_inode's data block and write to disk
 
-	INodeBitMap = calloc('0', sizeof(bitmap_t) * MAX_INUM);
 	// Allocate a new data block for this directory if it does not exist
 
 	// Update directory inode
@@ -258,11 +185,20 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 
 /* 
  * namei operation
+ returning an INODE. But why is 
  */
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
+	char *PathTokens = strtok(path, "/");
+
+	// PATH WALKER. Can now find Inodes through here.
+	while(PathTokens != NULL){
+
+		PathTokens = strtok(NULL, "/");
+	}
+
 
 	return 0;
 }
@@ -273,19 +209,15 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 int tfs_mkfs() {
 
 	// Call dev_init() to initialize (Create) Diskfile
+	dev_init("/SuperBlock");
+	dev_open("/SuperBlock");
 
-	dev_init("./FileSystem");
+	SuperBlockInit(); // Also initializes the inode and block bitmap
+	// write superblock information
+	bio_write(1, (void*)&SuperBlock);
+	// initialize inode bitmap
 
-	SuperBlockInit();
-	bio_write(0, (void*)&SuperBlock);
-	bio_write(1, (void*)&DataBitMap);
-	bio_write(2, (void*)&INodeBitMap);
-	writeInodeTableInit();
-	// write superblock information - Done
-
-	// initialize inode bitmap - Done
-
-	// initialize data block bitmap - Done
+	// initialize data block bitmap
 
 	// update bitmap information for root directory
 
@@ -302,22 +234,15 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 
 	// Step 1a: If disk file is not found, call mkfs
 
-	if(dev_open("./FileSystem") < 0){
-		tfs_mkfs();
+  	// Step 1b: If disk file is found, just initialize in-memory data structures
+	
+	if(1){
+		// DISK FOUND
+		bio_read(1, (void*)&SuperBlock);
 	}else{
-		bio_read(0, (void*)&SuperBlock);
-		if(SuperBlock.magic_num != MAGIC_NUM){
-			printf("ERROR! File Super Block corrupted.");
-			return;
-		}else{
-			// FILE BLOCK FOUND. READ ALL NEEDED DATA;
-
-			bio_read(1, (void*)&DataBitMap);
-			bio_read(2, (void*)&INodeBitMap);
-		}
+		tfs_mkfs();
+		// Initialize the Blocks
 	}
-  // Step 1b: If disk file is found, just initialize in-memory data structures
-  // and read superblock from disk
 
 	return NULL;
 }
@@ -348,6 +273,8 @@ static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
 	// Step 1: Call get_node_by_path() to get inode from path
 
 	// Step 2: If not find, return -1
+
+
 
     return 0;
 }
@@ -480,6 +407,7 @@ static int tfs_truncate(const char *path, off_t size) {
 static int tfs_release(const char *path, struct fuse_file_info *fi) {
 	// For this project, you don't need to fill this function
 	// But DO NOT DELETE IT!
+	
 	return 0;
 }
 

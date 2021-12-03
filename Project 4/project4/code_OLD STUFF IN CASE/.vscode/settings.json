@@ -4,6 +4,8 @@
         "stdlib.h": "c",
         "stdio.h": "c",
         "stat.h": "c",
-        "stddef.h": "c"
+        "stddef.h": "c",
+        "unistd.h": "c",
+        "types.h": "c"
     }
 }

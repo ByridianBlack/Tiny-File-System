@@ -44,11 +44,10 @@ int dev_open(const char* diskfile_path) {
     if (diskfile >= 0) {
 		return 0;
     }
-    
     diskfile = open(diskfile_path, O_RDWR, S_IRUSR | S_IWUSR);
     if (diskfile < 0) {
-		  perror("disk_open failed");
-		  return -1;
+		perror("disk_open failed");
+		return -1;
     }
 	return 0;
 }
