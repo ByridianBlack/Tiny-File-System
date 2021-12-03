@@ -298,9 +298,8 @@ int tfs_mkfs() {
 
 	SuperBlockInit();
 	bio_write(0, (void*)&SuperBlock);
-	bio_write(1, (void*)&DataBitMap);
-	bio_write(2, (void*)&INodeBitMap);
 	writeInodeTableInit();
+	writeDataBlockBitMapInit();
 	// write superblock information - Done
 
 	// initialize inode bitmap - Done
