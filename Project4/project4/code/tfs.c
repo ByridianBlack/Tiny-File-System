@@ -26,6 +26,8 @@
 #include "block.h"
 #include "tfs.h"
 
+#define FILE 1
+#define DIRECTORY 2 // Directory
 char diskfile_path[PATH_MAX];
 
 struct superblock SuperBlock;
@@ -87,6 +89,9 @@ void writeInodeTableInit(){
 			INodeTable->ino = ino+1;
 			if(i == 1 || i == 2){
 				INodeTable->valid = -1;
+				if(i == 2){
+					INodeTable->type = DIRECTORY;
+				}
 			}else{
 				INodeTable->valid = 1;
 			}
