@@ -35,6 +35,7 @@ bitmap_t DataBitMap;
 bitmap_t INodeBitMap;
 struct inode* INodeTable;
 
+int blockCount = 0;
 
 /*
 
@@ -129,28 +130,27 @@ void writeInodeTableInit(){
 int get_avail_ino() {
 
 	// Step 1: Read inode bitmap from disk
-	int available_index = 0;
-	for(int i = 33; i < 35; i++){
-		INodeBitMap = calloc('0', sizeof(bitmap_t) * (MAX_INUM/2));
-		bio_read(i, (void*)&INodeBitMap);
-		for(int j = 0; j < MAX_INUM; j++){
-			
-			if(INodeBitMap[j] == '0'){
-				set_bitmap(INodeBitMap, '1');
-				
-				bio_write(i, (void*)&INodeBitMap);
-				free(INodeBitMap);
-				return available_index;
-
-			}
-			available_index++;
-
-		}
-	}
-	// Step 2: Traverse inode bitmap to find an available slot
-
-	// Step 3: Update inode bitmap and write to disk 
-
+        unsigned char inodeBitmap[BLOCK_SIZE] = {};
+        int ret = bio_read(SuperBlock.i_bitmap_blk, (bitmap_t) inodeBitmap);
+	if (ret < 0) {return -1;}
+        
+        // Step 2: Traverse inode bitmap to find an available slot
+        for (int i = 0; i <= MAX_INUM; i++) {
+                if (get_bitmap((bitmap_t) inodeBitmap, i) == 0) {
+                
+                        // Step 3: Update inode bitmap and write to disk 
+                        set_bitmap((bitmap_t) inodeBitmap, i);
+                        ret = bio_write(SuperBlock.i_bitmap_blk, (bitmap_t) inodeBitmap);
+                        if (ret < 0) {
+                                return -1;
+                        } else {
+                                // The available inode number
+                                return i; 
+                        }
+                }
+                
+        }
+        // Failed to find an available inode number.
 	return -1;
 }
 
@@ -159,30 +159,28 @@ int get_avail_ino() {
  */
 int get_avail_blkno() {
 
-
-	int available_index = 0;
-	for(int i = 1; i < 33; i++){
-		DataBitMap = calloc('0', sizeof(bitmap_t) * (MAX_DNUM/32));
-		bio_read(i, (void*)&DataBitMap);
-		for(int j = 0; j < MAX_INUM; j++){
-			
-			if(DataBitMap[j] == '0'){
-				set_bitmap(DataBitMap, '1');
-				
-				bio_write(i, (void*)&DataBitMap);
-				free(DataBitMap);
-				return available_index;
-			}
-			available_index++;
-		}
-	}
-
 	// Step 1: Read data block bitmap from disk
-	
+	unsigned char blockBitmap[BLOCK_SIZE] = {};
+        int ret = bio_read(SuperBlock.d_bitmap_blk, (bitmap_t) blockBitmap);
+        if (ret < 0) {return -1;}
+        
 	// Step 2: Traverse data block bitmap to find an available slot
-
-	// Step 3: Update data block bitmap and write to disk 
-
+        for (int i = 0; i < MAX_DNUM; i++) {
+                if(get_bitmap((bitmap_t) blockBitmap, i) == 0) {
+                        blockCount += 1;
+                        
+                        // Step 3: Update data block bitmap and write to disk 
+                        set_bitmap((bitmap_t) blockBitmap, i);
+                        ret = bio_write(SuperBlock.d_bitmap_blk, (bitmap_t) blockBitmap);
+                        if (ret < 0) {
+                                return -1;
+                        } else {
+                                // The available block number
+                                return i;
+                        }
+                }
+        }
+        // Failed to find an available block number
 	return -1;
 }
 
