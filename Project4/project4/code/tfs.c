@@ -251,29 +251,32 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
         
         // Step 2: Get data block of current directory from inode
         char dataBlock[BLOCK_SIZE] = {0};
-        
-        // We assume that only the first data block holds directory entries.
-        ret = bio_read(directoryInode.direct_ptr[0], dataBlock);    
-        if (ret < 0) {return -1;}
-        
-        // Number of directory entries in a block
+        struct dirent workingDirent = {0};
         int directoryEntryCount = BLOCK_SIZE / sizeof(struct dirent);
         
-        struct dirent workingDirent = {0};
-        
-        // Step 3: Read directory's data block and check each directory entry.
-        // If the name matches, then copy directory entry to dirent structure
-        for (int i = 0; i < directoryEntryCount; i++) {
-                // The byte offset into the block.
-                int blockOffset = i * sizeof(struct dirent);
+        // Iterate over all the direct blocks
+        for (int i = 0; i < 16; i++) {
+                // check if pointer is valid
+                if (directoryInode.direct_ptr[i] == 0) continue;
                 
-                // Copy the directory entry into 
-                memcpy(&workingDirent, dataBlock + blockOffset, sizeof(struct dirent));
+                // Read the block from disk
+                ret = bio_read(directoryInode.direct_ptr[i], dataBlock);    
+                if (ret < 0) {return -1;}
                 
-                // Check if dirent is valid and the names match
-                if (workingDirent.valid == 1 && !memcmp(workingDirent.name, fname, name_len)) {
-                        memcpy(dirent, &workingDirent, sizeof(struct dirent));
-                        return 0;
+                // Step 3: Read directory's data block and check each directory entry.
+                // If the name matches, then copy directory entry to dirent structure
+                for (int j = 0; j < directoryEntryCount; j++) {
+                        // The byte offset into the block.
+                        int blockOffset = j * sizeof(struct dirent);
+                
+                        // Copy the directory entry into 
+                        memcpy(&workingDirent, dataBlock + blockOffset, sizeof(struct dirent));
+                
+                        // Check if dirent is valid and the names match
+                        if (workingDirent.valid == 1 && !memcmp(workingDirent.name, fname, name_len)) {
+                                memcpy(dirent, &workingDirent, sizeof(struct dirent));
+                                return 0;
+                        }
                 }
         }
         
