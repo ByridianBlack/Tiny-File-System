@@ -130,7 +130,7 @@ void writeInodeTableInit(){
 int get_avail_ino() {
 
 	// Step 1: Read inode bitmap from disk
-        unsigned char inodeBitmap[BLOCK_SIZE] = {};
+        unsigned char inodeBitmap[BLOCK_SIZE] = {0};
         int ret = bio_read(SuperBlock.i_bitmap_blk, (bitmap_t) inodeBitmap);
 	if (ret < 0) {return -1;}
         
@@ -160,7 +160,7 @@ int get_avail_ino() {
 int get_avail_blkno() {
 
 	// Step 1: Read data block bitmap from disk
-	unsigned char blockBitmap[BLOCK_SIZE] = {};
+	unsigned char blockBitmap[BLOCK_SIZE] = {0};
         int ret = bio_read(SuperBlock.d_bitmap_blk, (bitmap_t) blockBitmap);
         if (ret < 0) {return -1;}
         
@@ -188,48 +188,53 @@ int get_avail_blkno() {
  * inode operations
  */
 int readi(uint16_t ino, struct inode *inode) {
-
-
-	INodeTable = calloc(0,sizeof(struct inode) * 16);
-
-	int block_number = (ino * sizeof(struct inode)) / BLOCK_SIZE;
-
-	bio_read(block_number, (void*) &INodeTable);
-
-	int sector = ((block_number * BLOCK_SIZE) + SuperBlock.i_start_blk) / 16;
-
-	memcpy(&inode, &INodeTable[sector], sizeof(struct inode));
-	free(INodeTable);
-  // Step 1: Get the inode's on-disk block number
-
-  // Step 2: Get offset of the inode in the inode on-disk block
-
-  // Step 3: Read the block from disk and then copy into inode structure
+        // Step 1: Get the inode's on-disk block number
+        
+        // Note: each inode is sizeof(struct inode) bytes large.
+        // Byte offset into inode region is ino * sizeof(struct inode)
+        // Block offset into inode region is (ino * sizeof(struct inode)) / BLOCK_SIZE
+        int inodeBlockNumber = SuperBlock.i_start_blk + ((ino * sizeof(struct inode)) / BLOCK_SIZE);
+        
+        // Create a block to read into.
+        char inodeBlock[BLOCK_SIZE] = {0};
+        
+        // Read block from disk.
+        int ret = bio_read(inodeBlockNumber, inodeBlock);
+        if (ret < 0) {return -1;}
+        
+        // Step 2: Get offset of the inode in the inode on-disk block
+        int blockOffset = (ino * sizeof(struct inode)) % BLOCK_SIZE;
+        
+        // Step 3: Read the block from disk and then copy into inode structure
+        memcpy(inode, inodeBlock + blockOffset, sizeof(struct inode));
 
 	return 0;
 }
 
 int writei(uint16_t ino, struct inode *inode) {
-
-
-	// INodeTable 
-
-	INodeTable = calloc(0,sizeof(struct inode) * 16);
-
-	int block_number = (ino * sizeof(struct inode)) / BLOCK_SIZE;
-	int sector = ((block_number * BLOCK_SIZE) + SuperBlock.i_start_blk) / 16;
-
-	bio_read(block_number, (void*) &INodeTable);
-
-	memcpy(&INodeTable[sector], &inode, sizeof(struct inode));
-	bio_write(block_number, (void*)&INodeTable);
-	free(INodeTable);
-
-	// Step 1: Get the block number where this inode resides on disk
-	
-	// Step 2: Get the offset in the block where this inode resides on disk
-
-	// Step 3: Write inode to disk 
+        // Step 1: Get the block number where this inode resides on disk
+        
+        // Note: each inode is sizeof(struct inode) bytes large.
+        // Byte offset into inode region is ino * sizeof(struct inode)
+        // Block offset into inode region is (ino * sizeof(struct inode)) / BLOCK_SIZE
+        int inodeBlockNumber = SuperBlock.i_start_blk + ((ino * sizeof(struct inode)) / BLOCK_SIZE);
+        
+        // Create a block to read into.
+        char inodeBlock[BLOCK_SIZE] = {0};
+        
+        // Read block from disk.
+        int ret = bio_read(inodeBlockNumber, inodeBlock);
+        if (ret < 0) {return -1;}
+        
+        // Step 2: Get the offset in the block where this inode resides on disk
+        int blockOffset = (ino * sizeof(struct inode)) % BLOCK_SIZE;
+        
+        // Write the inode to the block
+        memcpy(inodeBlock + blockOffset, inode, sizeof(struct inode));
+        
+        // Step 3: Write inode to disk 
+        ret = bio_write(inodeBlockNumber, inodeBlock);
+        if (ret < 0) {return -1;}
 
 	return 0;
 }
