@@ -8,6 +8,4 @@ int main(int argc, char const *argv[]) {
         printf("Size of inode: %ld\n", sizeof(struct inode));
         
         printf("Size of dirent: %ld\n", sizeof(struct dirent)); 
-        
-
 }
