@@ -244,15 +244,41 @@ int writei(uint16_t ino, struct inode *inode) {
  * directory operations
  */
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent) {
-
-  // Step 1: Call readi() to get the inode using ino (inode number of current directory)
-
-  // Step 2: Get data block of current directory from inode
-
-  // Step 3: Read directory's data block and check each directory entry.
-  //If the name matches, then copy directory entry to dirent structure
-
-	return 0;
+        // Step 1: Call readi() to get the inode using ino (inode number of current directory)
+        struct inode directoryInode = {0};
+        int ret = readi(ino, &directoryInode);
+        if (ret < 0) {return -1;}
+        
+        // Step 2: Get data block of current directory from inode
+        char dataBlock[BLOCK_SIZE] = {0};
+        
+        // We assume that only the first data block holds directory entries.
+        ret = bio_read(directoryInode.direct_ptr[0], dataBlock);    
+        if (ret < 0) {return -1;}
+        
+        // Number of directory entries in a block
+        int directoryEntryCount = BLOCK_SIZE / sizeof(struct dirent);
+        
+        struct dirent workingDirent = {0};
+        
+        // Step 3: Read directory's data block and check each directory entry.
+        // If the name matches, then copy directory entry to dirent structure
+        for (int i = 0; i < directoryEntryCount; i++) {
+                // The byte offset into the block.
+                int blockOffset = i * sizeof(struct dirent);
+                
+                // Copy the directory entry into 
+                memcpy(&workingDirent, dataBlock + blockOffset, sizeof(struct dirent));
+                
+                // Check if dirent is valid and the names match
+                if (workingDirent.valid == 1 && !memcmp(workingDirent.name, fname, name_len)) {
+                        memcpy(dirent, &workingDirent, sizeof(struct dirent));
+                        return 0;
+                }
+        }
+        
+        // Could not find the name.
+	return -1;
 }
 
 int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t name_len) {

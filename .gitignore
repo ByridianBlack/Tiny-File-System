@@ -1,0 +1,17 @@
+*
+!.gitignore
+!Project4
+!Project4/project4
+!Project4/project4.zip
+!Project4/project4.pdf
+!Project4/project4/code
+!Project4/project4/code/block.c
+!Project4/project4/code/block.h
+!Project4/project4/code/Makefile
+!Project4/project4/code/tfs.c
+!Project4/project4/code/tfs.h
+!Project4/project4/code/benchmark
+!Project4/project4/code/benchmark/bitmap_check.c
+!Project4/project4/code/benchmark/simple_test.c
+!Project4/project4/code/benchmark/test_case.c
+!Project4/project4/code/benchmark/Makefile
