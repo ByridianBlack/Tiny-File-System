@@ -232,7 +232,7 @@ int writei(uint16_t ino, struct inode *inode) {
         // Write the inode to the block
         memcpy(inodeBlock + blockOffset, inode, sizeof(struct inode));
         
-        // Step 3: Write inode to disk 
+        // Step 3: Write the block the inode is in to disk 
         ret = bio_write(inodeBlockNumber, inodeBlock);
         if (ret < 0) {return -1;}
 
@@ -251,13 +251,13 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
         
         // Step 2: Get data block of current directory from inode
         char dataBlock[BLOCK_SIZE] = {0};
-        struct dirent workingDirent = {0};
         int directoryEntryCount = BLOCK_SIZE / sizeof(struct dirent);
         
         // Iterate over all the direct blocks
         for (int i = 0; i < 16; i++) {
-                // check if pointer is valid
-                if (directoryInode.direct_ptr[i] == 0) continue;
+                // check if pointer is valid. Directory entries are allocated in order,
+                // so the first invalid block indicates no more directory entries.
+                if (directoryInode.direct_ptr[i] == 0) break;
                 
                 // Read the block from disk
                 ret = bio_read(directoryInode.direct_ptr[i], dataBlock);    
@@ -266,15 +266,13 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
                 // Step 3: Read directory's data block and check each directory entry.
                 // If the name matches, then copy directory entry to dirent structure
                 for (int j = 0; j < directoryEntryCount; j++) {
-                        // The byte offset into the block.
-                        int blockOffset = j * sizeof(struct dirent);
-                
-                        // Copy the directory entry into 
-                        memcpy(&workingDirent, dataBlock + blockOffset, sizeof(struct dirent));
-                
+                        
+                        // Get a pointer to a directory entry inside the datablock. We cast raw bytes into a pointer type.
+                        struct dirent *workingDirent = (struct dirent *) (dataBlock + (j * sizeof(struct dirent)));
+                        
                         // Check if dirent is valid and the names match
-                        if (workingDirent.valid == 1 && !memcmp(workingDirent.name, fname, name_len)) {
-                                memcpy(dirent, &workingDirent, sizeof(struct dirent));
+                        if (workingDirent->valid == 1 && !memcmp(workingDirent->name, fname, name_len)) {
+                                memcpy(dirent, workingDirent, sizeof(struct dirent));
                                 return 0;
                         }
                 }
@@ -285,21 +283,86 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 }
 
 int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t name_len) {
-
-	// Step 1: Read dir_inode's data block and check each directory entry of dir_inode
-	
-	// Step 2: Check if fname (directory name) is already used in other entries
+	// Step 1: Read dir_inode's data block
+        char dataBlock[BLOCK_SIZE] = {0};
+        int directoryEntryCount = BLOCK_SIZE / sizeof(struct dirent);
+        int ret = 0;
+        
+        // The blocks that correspond to the direct pointers.
+        int blockIndex = 0;
+        
+        // Step 2: Check if fname (directory name) is already used in other entries
+        // Iterate over the 16 direct pointers
+        for (blockIndex = 0; blockIndex < 16; blockIndex++) {
+                
+                // Check if pointer is valid.
+                if (dir_inode.direct_ptr[blockIndex] == 0) break;
+                
+                // Read the block from the disk
+                ret = bio_read(dir_inode.direct_ptr[blockIndex], dataBlock);
+                if (ret < 0) {return -1;}
+                
+                // Iterate over the directory entries in the block.
+                for (int j = 0; j < directoryEntryCount; j++) {
+                        
+                        // Get a pointer to a directory entry in the datablock. We cast raw bytes into a pointer type.
+                        struct dirent *workingDirent = (struct dirent *) (dataBlock + (j * sizeof(struct dirent)));
+                        
+                        // Check if dirent is valid and the names match. Can't add dir if duplicate.
+                        if (workingDirent->valid == 1 && !memcmp(workingDirent->name, fname, name_len)) {
+                                return -1;
+                        }
+                        
+                        // Invalid entry means we can write to it.
+                        if (workingDirent->valid == 0) {
+                                
+                                // Sanitize the workingDirent struct.
+                                memset(workingDirent, 0, sizeof(struct dirent));
+                                
+                                // Copy data into workingDirect
+                                workingDirent->ino   = f_ino;
+                                workingDirent->valid = 1;
+                                memcpy(workingDirent->name, fname, name_len);
+                                
+                                // Write block to disk. Note that inode is not updated
+                                ret = bio_write(dir_inode.direct_ptr[blockIndex], dataBlock);
+                                if (ret < 0) {return -1;}
+                                
+                                return 0;
+                        }
+                }
+        }
+        
+        // Case where directory has maximum number of files
+        if (blockIndex == 16) {
+                return -1;
+        }
+        
+        // Allocate a new block to the directory
+        int blockPointer = SuperBlock.d_start_blk + (get_avail_blkno() * BLOCK_SIZE);
+        char newBlock[BLOCK_SIZE] = {0};
+        
+        // Update the inode and write it to disk.
+        dir_inode.direct_ptr[blockIndex] = blockPointer;
+        ret = writei(dir_inode.ino, &dir_inode);
+        if (ret < 0) {return -1;}
+        
+        // Write the directory entry to the block.
+        // Note that the directory entry will always be at the start of the block.
+        struct dirent newEntry = {0};
+        newEntry.ino = f_ino;
+        newEntry.valid = 1;
+        memcpy(newEntry.name, fname, name_len);
+        memcpy(newBlock, &newEntry, sizeof(struct dirent));
+        
+        // Write the block to the disk
+        ret = bio_write(blockPointer, newBlock);
+        if (ret < 0) {return -1;}
+        
+        return 0;
+        
 
 	// Step 3: Add directory entry in dir_inode's data block and write to disk
-
-	INodeBitMap = calloc('0', sizeof(bitmap_t) * MAX_INUM);
-	// Allocate a new data block for this directory if it does not exist
-
-	// Update directory inode
-
-	// Write directory entry
-
-	return 0;
 }
 
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
