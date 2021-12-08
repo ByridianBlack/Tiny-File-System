@@ -339,7 +339,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
         }
         
         // Allocate a new block to the directory
-        int blockPointer = SuperBlock.d_start_blk + (get_avail_blkno() * BLOCK_SIZE);
+        int blockPointer = SuperBlock.d_start_blk + get_avail_blkno();
         char newBlock[BLOCK_SIZE] = {0};
         
         // Update the inode and write it to disk.
