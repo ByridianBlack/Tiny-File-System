@@ -193,13 +193,13 @@ int readi(uint16_t ino, struct inode *inode) {
         // Note: each inode is sizeof(struct inode) bytes large.
         // Byte offset into inode region is ino * sizeof(struct inode)
         // Block offset into inode region is (ino * sizeof(struct inode)) / BLOCK_SIZE
-        int inodeBlockNumber = SuperBlock.i_start_blk + ((ino * sizeof(struct inode)) / BLOCK_SIZE);
+        int inodeBlockIndex = SuperBlock.i_start_blk + ((ino * sizeof(struct inode)) / BLOCK_SIZE);
         
         // Create a block to read into.
         char inodeBlock[BLOCK_SIZE] = {0};
         
         // Read block from disk.
-        int ret = bio_read(inodeBlockNumber, inodeBlock);
+        int ret = bio_read(inodeBlockIndex, inodeBlock);
         if (ret < 0) {return -1;}
         
         // Step 2: Get offset of the inode in the inode on-disk block
@@ -217,13 +217,13 @@ int writei(uint16_t ino, struct inode *inode) {
         // Note: each inode is sizeof(struct inode) bytes large.
         // Byte offset into inode region is ino * sizeof(struct inode)
         // Block offset into inode region is (ino * sizeof(struct inode)) / BLOCK_SIZE
-        int inodeBlockNumber = SuperBlock.i_start_blk + ((ino * sizeof(struct inode)) / BLOCK_SIZE);
+        int inodeBlockIndex = SuperBlock.i_start_blk + ((ino * sizeof(struct inode)) / BLOCK_SIZE);
         
         // Create a block to read into.
         char inodeBlock[BLOCK_SIZE] = {0};
         
         // Read block from disk.
-        int ret = bio_read(inodeBlockNumber, inodeBlock);
+        int ret = bio_read(inodeBlockIndex, inodeBlock);
         if (ret < 0) {return -1;}
         
         // Step 2: Get the offset in the block where this inode resides on disk
@@ -339,11 +339,11 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
         }
         
         // Allocate a new block to the directory
-        int blockPointer = SuperBlock.d_start_blk + get_avail_blkno();
+        int newBlockIndex = SuperBlock.d_start_blk + get_avail_blkno();
         char newBlock[BLOCK_SIZE] = {0};
         
         // Update the inode and write it to disk.
-        dir_inode.direct_ptr[blockIndex] = blockPointer;
+        dir_inode.direct_ptr[blockIndex] = newBlockIndex;
         ret = writei(dir_inode.ino, &dir_inode);
         if (ret < 0) {return -1;}
         
@@ -356,7 +356,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
         memcpy(newBlock, &newEntry, sizeof(struct dirent));
         
         // Write the block to the disk
-        ret = bio_write(blockPointer, newBlock);
+        ret = bio_write(newBlockIndex, newBlock);
         if (ret < 0) {return -1;}
         
         return 0;
