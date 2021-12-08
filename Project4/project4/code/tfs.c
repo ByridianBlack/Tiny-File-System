@@ -31,7 +31,7 @@
 char diskfile_path[PATH_MAX];
 
 struct superblock SuperBlock;
-bitmap_t DataBitMap;
+bitmap_t DataBitMap[MAX_DNUM/4] = {'0'};
 bitmap_t INodeBitMap;
 struct inode* INodeTable;
 
@@ -50,31 +50,23 @@ void SuperBlockInit(){
 	SuperBlock.magic_num = MAGIC_NUM;
 	SuperBlock.max_inum  = MAX_INUM;
 	SuperBlock.max_dnum  = MAX_DNUM;
-	SuperBlock.d_start_blk = 67; // START OF THE DATA REGION
-	SuperBlock.i_start_blk = 3;
-	SuperBlock.d_bitmap_blk = 2;
-	SuperBlock.i_bitmap_blk = 1;
+	SuperBlock.d_bitmap_blk = 1;
+	SuperBlock.i_bitmap_blk = 5;
+	SuperBlock.d_start_blk = 70; // START OF THE DATA REGION
+	SuperBlock.i_start_blk = 6;
 
 	
 }
 
 
 void writeDataBlockBitMapInit(){
-
-	for(int i = 1; i < 33; i++){
-		DataBitMap  = calloc('0', sizeof(bitmap_t) * (MAX_DNUM/32));
-		bio_write(i, (void*)&DataBitMap);
-		free(DataBitMap);
-	}
+        for(int i = SuperBlock.d_bitmap_blk; i < SuperBlock.i_bitmap_blk; i++){
+                bio_write(i, (void*)&DataBitMap);
+        }
 }
 
 void writeInodeBitMapInit(){
-
-	for(int i = 33; i < 35; i++){
-		INodeBitMap = calloc('0', sizeof(bitmap_t) * (MAX_INUM/2));
-		bio_write(i, (void*)&INodeBitMap);
-		free(INodeBitMap);
-	}
+        bio_write(SuperBlock.i_bitmap_blk, (void*)&INodeBitMap[MAX_INUM]);
 }
 
 
@@ -82,7 +74,7 @@ void writeInodeTableInit(){
 
 	signed long accum = 0;
 	int ino = 0;
-	for(int i = 35; i < 99; i++){
+	for(int i = SuperBlock.i_start_blk; i < SuperBlock.d_start_blk; i++){
 
 		INodeTable = malloc(sizeof(struct inode) * 16);
 
@@ -106,7 +98,6 @@ void writeInodeTableInit(){
 
 		bio_write(i, (void*)&INodeTable);
 		free(INodeTable);
-
 	}
 
 }
@@ -233,7 +224,7 @@ int writei(uint16_t ino, struct inode *inode) {
         memcpy(inodeBlock + blockOffset, inode, sizeof(struct inode));
         
         // Step 3: Write the block the inode is in to disk 
-        ret = bio_write(inodeBlockNumber, inodeBlock);
+        ret = bio_write(inodeBlockIndex, inodeBlock);
         if (ret < 0) {return -1;}
 
 	return 0;
