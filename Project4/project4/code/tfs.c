@@ -360,20 +360,52 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
         if (ret < 0) {return -1;}
         
         return 0;
-        
 
 	// Step 3: Add directory entry in dir_inode's data block and write to disk
 }
 
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
-
 	// Step 1: Read dir_inode's data block and checks each directory entry of dir_inode
-	
-	// Step 2: Check if fname exist
-
-	// Step 3: If exist, then remove it from dir_inode's data block and write to disk
-
-	return 0;
+	char dataBlock[BLOCK_SIZE] = {0};
+        int directoryEntryCount = BLOCK_SIZE / sizeof(struct dirent);
+        int ret = 0;
+        
+        // Iterate over each of the data blocks.
+        for (int i = 0; i < 16; i++) {
+                
+                // Check if pointer is valid. Blocks are used in order.
+                if (dir_inode.direct_ptr[i] == 0) return -1;
+                
+                // Read the block from the disk
+                ret = bio_read(dir_inode.direct_ptr[i], dataBlock);
+                if (ret < 0) {return -1;}
+                
+                // Iterate over the directory entries in the block
+                for (int j = 0; j < directoryEntryCount; j++) {
+                        
+                        // Get a pointer to a directory entry in the datablock. We cast raw bytes into a pointer type.
+                        struct dirent *workingDirent = (struct dirent *) (dataBlock + (j * sizeof(struct dirent)));
+                        
+                        // Step 2: Check if fname exist
+                        // Step 3: If exist, then remove it from dir_inode's data block and write to disk
+                        if (workingDirent->valid == 1 && !memcmp(workingDirent->name, fname, name_len)) {
+                                // Set bytes to 0
+                                memset(workingDirent, 0, sizeof(struct dirent));
+                                
+                                // Write block to the disk
+                                ret = bio_write(dir_inode.direct_ptr[i], dataBlock);
+                                if (ret < 0) {
+                                        return -1;
+                                } else {
+                                        // Successfully deleted the directory entry
+                                        return 0;
+                                }
+                        }  
+                }
+        }
+        
+        // We iterated through all the directory entries but didn't find the name.
+        return -1;
 }
 
 /* 
