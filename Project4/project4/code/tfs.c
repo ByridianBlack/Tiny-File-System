@@ -50,10 +50,10 @@ void SuperBlockInit(){
 	SuperBlock.magic_num = MAGIC_NUM;
 	SuperBlock.max_inum  = MAX_INUM;
 	SuperBlock.max_dnum  = MAX_DNUM;
-	SuperBlock.d_bitmap_blk = 1;
-	SuperBlock.i_bitmap_blk = 5;
-	SuperBlock.d_start_blk = 70; // START OF THE DATA REGION
-	SuperBlock.i_start_blk = 6;
+        SuperBlock.i_bitmap_blk = 1;
+	SuperBlock.d_bitmap_blk = 2;
+        SuperBlock.i_start_blk = 3;
+	SuperBlock.d_start_blk = 67; // START OF THE DATA REGION
 
 	
 }
