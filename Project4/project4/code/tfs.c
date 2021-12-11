@@ -522,14 +522,22 @@ static void tfs_destroy(void *userdata) {
 }
 
 static int tfs_getattr(const char *path, struct stat *stbuf) {
-
 	// Step 1: call get_node_by_path() to get inode from path
+        
+        int ret = 0;
+        struct inode getIno = {0};
+        
+        // We assume the path is absolute since no root is provided.
+        ret = get_node_by_path(path, ROOT_INODE, &getIno);
+        if (ret != 0) {return -1;}
 
 	// Step 2: fill attribute of file into stbuf from inode
+        memcpy(stbuf, getIno->vstat, sizeof(struct stat));
 
-		stbuf->st_mode   = S_IFDIR | 0755;
-		stbuf->st_nlink  = 2;
-		time(&stbuf->st_mtime);
+        /* stbuf->st_mode   = S_IFDIR | 0755;
+           stbuf->st_nlink  = 2;
+           time(&stbuf->st_mtime);
+        */
 
 	return 0;
 }
