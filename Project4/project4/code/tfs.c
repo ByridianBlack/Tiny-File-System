@@ -35,7 +35,9 @@ bitmap_t DataBitMap[MAX_DNUM/4] = {'0'};
 bitmap_t INodeBitMap;
 struct inode* INodeTable;
 
-int blockCount = 0;
+// Below are Paul's macros and globals
+#define ROOT_INODE 2
+
 
 /*
 
@@ -158,7 +160,6 @@ int get_avail_blkno() {
 	// Step 2: Traverse data block bitmap to find an available slot
         for (int i = 0; i < MAX_DNUM; i++) {
                 if(get_bitmap((bitmap_t) blockBitmap, i) == 0) {
-                        blockCount += 1;
                         
                         // Step 3: Update data block bitmap and write to disk 
                         set_bitmap((bitmap_t) blockBitmap, i);
@@ -187,7 +188,7 @@ int readi(uint16_t ino, struct inode *inode) {
         int inodeBlockIndex = SuperBlock.i_start_blk + ((ino * sizeof(struct inode)) / BLOCK_SIZE);
         
         // Create a block to read into.
-        char inodeBlock[BLOCK_SIZE] = {0};
+        unsigned char inodeBlock[BLOCK_SIZE] = {0};
         
         // Read block from disk.
         int ret = bio_read(inodeBlockIndex, inodeBlock);
@@ -211,7 +212,7 @@ int writei(uint16_t ino, struct inode *inode) {
         int inodeBlockIndex = SuperBlock.i_start_blk + ((ino * sizeof(struct inode)) / BLOCK_SIZE);
         
         // Create a block to read into.
-        char inodeBlock[BLOCK_SIZE] = {0};
+        unsigned char inodeBlock[BLOCK_SIZE] = {0};
         
         // Read block from disk.
         int ret = bio_read(inodeBlockIndex, inodeBlock);
@@ -241,7 +242,7 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
         if (ret < 0) {return -1;}
         
         // Step 2: Get data block of current directory from inode
-        char dataBlock[BLOCK_SIZE] = {0};
+        unsigned char dataBlock[BLOCK_SIZE] = {0};
         int directoryEntryCount = BLOCK_SIZE / sizeof(struct dirent);
         
         // Iterate over all the direct blocks
@@ -275,7 +276,7 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 
 int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t name_len) {
 	// Step 1: Read dir_inode's data block
-        char dataBlock[BLOCK_SIZE] = {0};
+        unsigned char dataBlock[BLOCK_SIZE] = {0};
         int directoryEntryCount = BLOCK_SIZE / sizeof(struct dirent);
         int ret = 0;
         
@@ -331,7 +332,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
         
         // Allocate a new block to the directory
         int newBlockIndex = SuperBlock.d_start_blk + get_avail_blkno();
-        char newBlock[BLOCK_SIZE] = {0};
+        unsigned char newBlock[BLOCK_SIZE] = {0};
         
         // Update the inode and write it to disk.
         dir_inode.direct_ptr[blockIndex] = newBlockIndex;
@@ -357,7 +358,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 	// Step 1: Read dir_inode's data block and checks each directory entry of dir_inode
-	char dataBlock[BLOCK_SIZE] = {0};
+	unsigned char dataBlock[BLOCK_SIZE] = {0};
         int directoryEntryCount = BLOCK_SIZE / sizeof(struct dirent);
         int ret = 0;
         
@@ -403,11 +404,59 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
  * namei operation
  */
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
-	
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
-
-	return 0;
+        
+        int ret = 0;
+        // We begin resolving the path from ino. This allows us to support relative paths
+        // instead of always having an absolute path from root.
+        int atIno = ino; 
+        
+        // Path will be like /foo/bar. The start of the filename is "f", not "/"
+        const char *atFilename = path;
+        int lengthFileName = 0;
+        
+        while (*atFilename != '\0') {
+                
+                // Handles cases like /foo, /foo/, /foo//////bar
+                if (*atFilename == '/') {
+                        atFilename += 1;
+                        continue;
+                }
+                
+                // Calculate the length of the filename.
+                while(*(atFilename + lengthFileName) != '/' &&
+                      *(atFilename + lengthFileName) != '\0') {
+                        lengthFileName += 1;
+                }
+                
+                // Create a buffer for the filename. 
+                // Max filename length is 255 in linux. Name must be 
+                // null terminated too.
+                char fname[256] = {0};
+                memcpy(fname, atFilename, lengthFileName);
+                
+                // Find the directory entry for that specific filename
+                struct dirent foundEntry = {0};
+                ret = dir_find(atIno, fname, lengthFileName + 1, &foundEntry);
+                
+                if (ret != 0) {
+                        // Filename not found
+                        return -1; 
+                } else {
+                        atIno = foundEntry.ino;
+                        atFilename += lengthFileName;
+                        lengthFileName = 0;
+                }
+        }
+        
+        // Read the resolved inode.
+        ret = readi(atIno, inode);
+        if (ret != 0) {
+                return -1;
+        } else {
+                return 0;
+        }
 }
 
 /* 
