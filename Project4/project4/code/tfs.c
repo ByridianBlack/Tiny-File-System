@@ -527,7 +527,7 @@ static int tfs_getattr(const char *path, struct stat *stbuf) {
         int ret = 0;
         struct inode getIno = {0};
         
-        // We assume the path is absolute since no root is provided.
+        // We assume that the path is absolute since no root is provided.
         ret = get_node_by_path(path, ROOT_INODE, &getIno);
         if (ret != 0) {return -1;}
 
@@ -545,10 +545,16 @@ static int tfs_getattr(const char *path, struct stat *stbuf) {
 static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
 
 	// Step 1: Call get_node_by_path() to get inode from path
+        int ret = 0;
+        struct inode getIno = {0};
+        
+        // We assume that the path is absolute since no root is provided
+        ret = get_node_by_path(path, ROOT_INODE, &getIno);
 
 	// Step 2: If not find, return -1
-
-    return 0;
+        // It seems that all this function does is return 0 or -1 depending on
+        // whether the path is valid or not. 
+        return ret;
 }
 
 static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
