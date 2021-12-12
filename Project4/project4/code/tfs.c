@@ -31,9 +31,10 @@
 char diskfile_path[PATH_MAX];
 
 struct superblock SuperBlock;
-bitmap_t DataBitMap[MAX_DNUM/4] = {'0'};
-bitmap_t INodeBitMap;
-struct inode* INodeTable;
+
+//bitmap_t DataBitMap[MAX_DNUM/4] = {'0'};
+//bitmap_t INodeBitMap;
+//struct inode* INodeTable;
 
 // Below are Paul's macros and globals
 #define ROOT_INODE 2
@@ -54,13 +55,13 @@ void SuperBlockInit(){
 	SuperBlock.max_dnum  = MAX_DNUM;
         SuperBlock.i_bitmap_blk = 1;
 	SuperBlock.d_bitmap_blk = 2;
-        SuperBlock.i_start_blk = 3;
-	SuperBlock.d_start_blk = 67; // START OF THE DATA REGION
+        SuperBlock.i_start_blk = 3;  // START OF INODE BLOCKS
+	SuperBlock.d_start_blk = 67; // START OF THE DATA BLOCKS
 
 	
 }
 
-
+/*
 void writeDataBlockBitMapInit(){
         for(int i = SuperBlock.d_bitmap_blk; i < SuperBlock.i_bitmap_blk; i++){
                 bio_write(i, (void*)&DataBitMap);
@@ -103,6 +104,7 @@ void writeInodeTableInit(){
 	}
 
 }
+*/
 
 // Declare your in-memory data structures here
 /*
@@ -474,23 +476,60 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 int tfs_mkfs() {
 
 	// Call dev_init() to initialize (Create) Diskfile
-
-	dev_init("./FileSystem");
-
+	dev_init(diskfile_path);
 	SuperBlockInit();
-	bio_write(0, (void*)&SuperBlock);
-	writeInodeTableInit();
-	writeDataBlockBitMapInit();
-	// write superblock information - Done
-
-	// initialize inode bitmap - Done
-
-	// initialize data block bitmap - Done
-
-	// update bitmap information for root directory
+        
+        int ret = 0;
+        
+        // Create the superblock block
+        unsigned char onDiskSuperBlock[BLOCK_SIZE] = {0};
+        memcpy(onDiskSuperBlock, &SuperBlock, sizeof(struct superblock));
+        
+        // Write the superblock block to disk
+        ret = bio_write(0, onDiskSuperBlock);
+        if (ret != 0) {return -1;}
+        
+        unsigned char flatBlock[BLOCK_SIZE] = {0};
+        
+        // Write a blank data bitmap
+        ret = bio_write(2, flatBlock);
+        if (ret != 0) {return -1;}
+        
+        // update inode bitmap
+        // The first two inodes are used by convention.
+        // The third inode is for the root directory.
+        set_bitmap(flatBlock, 0);
+        set_bitmap(flatBlock, 1);
+        set_bitmap(flatBlock, 2);
+        
+        // Write the inode bitmap
+        ret = bio_write(1, flatBlock);
+        if (ret != 0) {return -1;}
 
 	// update inode for root directory
+        struct inode rootInode = {0};
+        rootInode.ino      = 2;
+        rootInode.valid    = 1;
+        rootInode.size  = BLOCK_SIZE;
+        rootInode.type  = DIRECTORY;
+        rootInode.link  = 2;
+        memset(rootInode.direct_ptr, 0, sizeof(int) * 16);       // Initialize the direct pointers to NULL 
+        memset(rootInode.indirect_ptr, 0, sizeof(int) * 8);      // Initialize the indirect pointers to NULL
+        rootInode.vstat.st_ino     = 2;
+        rootInode.vstat.st_mode    = (S_IFDIR | 0755);
+        rootInode.vstat.st_uid     = getuid();
+        rootInode.vstat.st_gid     = getgid();
+        rootInode.vstat.st_size    = BLOCK_SIZE;
+        rootInode.vstat.st_blksize = BLOCK_SIZE;
+        rootInode.vstat.st_atime   = time(NULL);
+        rootInode.vstat.st_mtime   = time(NULL);
+        rootInode.vstat.st_ctime   = time(NULL);
 
+        // Write the root inode to disk
+        ret = writei(2, &rootInode);
+        if (ret != 0) {return -1;}
+        
+        
 	return 0;
 }
 
@@ -502,32 +541,37 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 
 	// Step 1a: If disk file is not found, call mkfs
 
-	if(dev_open("./FileSystem") < 0){
-		tfs_mkfs();
-	}else{
-		bio_read(0, (void*)&SuperBlock);
-		if(SuperBlock.magic_num != MAGIC_NUM){
-			printf("ERROR! File Super Block corrupted.");
-			return;
-		}else{
-			// FILE BLOCK FOUND. READ ALL NEEDED DATA;
+        int ret = dev_open(diskfile_path);
+        
+        if (ret != 0) {
+                // We must make the file system
+                tfs_mkfs();
+                
+        } else {
+                // Step 1b: If disk file is found, just initialize in-memory data structures
+                // and read superblock from disk
+                // Write the super block to global space.
+                ret = bio_read(0, &SuperBlock); 
+                if (ret != 0) {
+                        exit(EXIT_FAILURE);
+                }
+                
+                // Check to make sure we're using the correct fs
+                if (SuperBlock.magic_num != MAGIC_NUM) {
+                        exit(EXIT_FAILURE);
+                }
+        }
 
-			bio_read(1, (void*)&DataBitMap);
-			bio_read(2, (void*)&INodeBitMap);
-		}
-	}
-  // Step 1b: If disk file is found, just initialize in-memory data structures
-  // and read superblock from disk
-
-	return NULL;
+        return NULL;
 }
 
 static void tfs_destroy(void *userdata) {
 
 	// Step 1: De-allocate in-memory data structures
-
+        // No structures are used.
+        
 	// Step 2: Close diskfile
-
+        dev_close();
 }
 
 static int tfs_getattr(const char *path, struct stat *stbuf) {
