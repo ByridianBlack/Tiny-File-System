@@ -974,6 +974,8 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
         
         // Iterate over all the direct pointers first.
         for (int i = 0; i < 16; i++) {
+                if (size == 0) {break;} // No more data to write.
+                
                 // Invalid pointer means that block isn't allocated. 
                 // We need to allocate block and write to it.
                 if (fileInode.direct_ptr[i] == 0) {
@@ -988,31 +990,27 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
                         
                         // Write an entire block of data.
                         if (size > BLOCK_SIZE) {
-                                // Copy data to block and write to disk.
                                 memcpy(dataBlock, buffer + bufferIndex, BLOCK_SIZE);
-                                ret = bio_write(fileInode.direct_ptr[i], dataBlock);
-                                if (ret < 0) {return -1;}
                                 
                                 offset      += BLOCK_SIZE;
                                 size        -= BLOCK_SIZE;
                                 bufferIndex += BLOCK_SIZE;
-                                continue;
                         
                         // Write a partial block of data.
-                        // Partial block means no more data to write.
                         } else {
-                                // Copy data to block and write to disk.
                                 int writeThisManyBytes = size;
                                 memcpy(dataBlock, buffer + bufferIndex, writeThisManyBytes);
-                                ret = bio_write(fileInode.direct_ptr[i], dataBlock);
-                                if (ret < 0) {return -1;}
                                 
                                 offset      += writeThisManyBytes;
                                 size        -= writeThisManyBytes;
                                 bufferIndex += writeThisManyBytes;
-                                
-                                break;
-                        }  
+                        }
+                        
+                        // Write block back to disk.
+                        ret = bio_write(fileInode.direct_ptr[i], dataBlock);
+                        if (ret < 0) {return -1;}
+                        continue;
+                        
                 }
                 
                 bytesIterated += BLOCK_SIZE;
@@ -1051,10 +1049,7 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
                         
                 }
                 
-                // Ending conditions when no more bytes are left to write.
-                if (size == 0) {
-                        break;
-                }
+                
         }
         
         // Step 4: Update the inode info and write it to disk
