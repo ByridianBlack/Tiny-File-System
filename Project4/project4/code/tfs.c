@@ -605,7 +605,7 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 
 
 static int tfs_mkdir(const char *path, mode_t mode) {
-	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
+	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name.
 
         // Create a copy of the path since dirname() and basename() can alter path.
         char dir[4096] = {0};         // Max path size if 4096 in linux
