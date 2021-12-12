@@ -509,6 +509,7 @@ int tfs_mkfs() {
         memset(rootInode.indirect_ptr, 0, sizeof(int) * 8);      // Initialize the indirect pointers to NULL
         rootInode.vstat.st_ino     = 2;
         rootInode.vstat.st_mode    = (S_IFDIR | 0755);
+        rootInode.vstat.st_nlink   = 2;
         rootInode.vstat.st_uid     = getuid();
         rootInode.vstat.st_gid     = getgid();
         rootInode.vstat.st_size    = BLOCK_SIZE;
@@ -696,7 +697,8 @@ static int tfs_mkdir(const char *path, mode_t mode) {
         memset(newInode.direct_ptr, 0, sizeof(int) * 16);       // Initialize the direct pointers to NULL 
         memset(newInode.indirect_ptr, 0, sizeof(int) * 8);      // Initialize the indirect pointers to NULL
         newInode.vstat.st_ino     = availableInode;
-        newInode.vstat.st_mode    = S_IFDIR | 0755;
+        newInode.vstat.st_mode    = S_IFDIR | 0755;             // Just use these permissions.
+        newInode.vstat.st_nlink   = 2;
         newInode.vstat.st_uid     = getuid();
         newInode.vstat.st_gid     = getgid();
         newInode.vstat.st_size    = BLOCK_SIZE;
