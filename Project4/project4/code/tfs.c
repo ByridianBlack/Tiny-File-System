@@ -810,6 +810,11 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 static int tfs_open(const char *path, struct fuse_file_info *fi) {
 
 	// Step 1: Call get_node_by_path() to get inode from path
+        struct inode getInode = {0};
+        int ret = get_node_by_path(path, ROOT_INODE, &getInode);
+        
+        // Case where file not found.
+        if (ret != 0) {return -1;}
 
 	// Step 2: If not find, return -1
 
