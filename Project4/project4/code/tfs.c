@@ -529,6 +529,16 @@ int tfs_mkfs() {
         ret = writei(2, &rootInode);
         if (ret != 0) {return -1;}
         
+        // Add '.' and '..' to the root inode
+        ret = dir_add(rootInode, rootInode.ino, ".", 2);
+        if (ret != 0) {return -1;}
+        
+        // Reread the rootInode since it was update by the previous dir_add.
+        ret = readi(2, &rootInode);
+        if (ret != 0) {return -1;}
+        
+        ret = dir_add(rootInode, rootInode.ino, "..", 3);
+        if (ret != 0) {return -1;}
         
 	return 0;
 }
