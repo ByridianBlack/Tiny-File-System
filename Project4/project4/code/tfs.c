@@ -337,14 +337,6 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
         int newBlockIndex = SuperBlock.d_start_blk + blkno;
         unsigned char newBlock[BLOCK_SIZE] = {0};
         
-        // Update bitmap to show that block is used.
-        unsigned char dataBitmap[BLOCK_SIZE] = {0};
-        ret = bio_read(SuperBlock.d_bitmap_blk, dataBitmap);
-        if (ret < 0) {return -1;}
-        set_bitmap(dataBitmap , blkno);
-        ret = bio_write(SuperBlock.d_bitmap_blk, dataBitmap);
-        if (ret < 0) {return -1;}
-        
         // Update the inode and write it to disk.
         dir_inode.direct_ptr[blockIndex] = newBlockIndex;
         ret = writei(dir_inode.ino, &dir_inode);
@@ -592,7 +584,7 @@ static int tfs_getattr(const char *path, struct stat *stbuf) {
         
         // We assume that the path is absolute since no root is provided.
         ret = get_node_by_path(path, ROOT_INODE, &getIno);
-        if (ret != 0) {return -1;}
+        if (ret != 0) {return -ENOENT;}
 
 	// Step 2: fill attribute of file into stbuf from inode
         memcpy(stbuf, &(getIno.vstat), sizeof(struct stat));
@@ -704,7 +696,7 @@ static int tfs_mkdir(const char *path, mode_t mode) {
         memset(newInode.direct_ptr, 0, sizeof(int) * 16);       // Initialize the direct pointers to NULL 
         memset(newInode.indirect_ptr, 0, sizeof(int) * 8);      // Initialize the indirect pointers to NULL
         newInode.vstat.st_ino     = availableInode;
-        newInode.vstat.st_mode    = mode;
+        newInode.vstat.st_mode    = S_IFDIR | 0755;
         newInode.vstat.st_uid     = getuid();
         newInode.vstat.st_gid     = getgid();
         newInode.vstat.st_size    = BLOCK_SIZE;
@@ -714,21 +706,25 @@ static int tfs_mkdir(const char *path, mode_t mode) {
         newInode.vstat.st_ctime   = time(NULL);
 
 	// Step 6: Call writei() to write inode to disk
-        // Write the new inode to the disk
-	ret = writei(availableInode, &newInode);
-        if (ret != 0) {return -1;}
-        
         // Write the inode of the base directory to disk.
         ret = writei(parentInode.ino, &parentInode);
         if (ret != 0) {return -1;}
         
-        // Update the inode bitmap to show that inode is used.
-        unsigned char inodeBitmap[BLOCK_SIZE] = {0};
-        ret = bio_read(SuperBlock.i_bitmap_blk, inodeBitmap);
-        if (ret < 0) {return -1;}
-        set_bitmap(inodeBitmap, availableInode);
-        ret = bio_write(SuperBlock.i_bitmap_blk, inodeBitmap);
-        if (ret < 0) {return -1;}
+        // Write the new inode to the disk
+	ret = writei(availableInode, &newInode);
+        if (ret != 0) {return -1;}
+        
+        // Add '.' and '..' to the new directory
+        ret = dir_add(newInode, newInode.ino, ".", 2);
+        if (ret != 0) {return -1;}
+        
+        // Reread the inode since it was updated on disk
+        ret = readi(availableInode, &newInode);
+        if (ret != 0) {return -1;}
+        
+        ret = dir_add(newInode, newInode.ino,"..", 3);
+        if (ret != 0) {return -1;}
+        
 
 	return 0;
 }
@@ -763,7 +759,8 @@ static int tfs_rmdir(const char *path) {
                 // Check if block pointer is valid
                 if (targetDir.direct_ptr[i] != 0) {
                         // If yes, we delete the block.
-                        unset_bitmap(blockBitmap, targetDir.direct_ptr[i]);
+                        int blockPointer = targetDir.direct_ptr[i] - SuperBlock.d_start_blk;
+                        unset_bitmap(blockBitmap, blockPointer);
                 }
         }
         // Commit changes to the data bitmap. Note that we might have anywhere
