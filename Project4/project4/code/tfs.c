@@ -340,10 +340,10 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
         // Update bitmap to show that block is used.
         unsigned char dataBitmap[BLOCK_SIZE] = {0};
         ret = bio_read(SuperBlock.d_bitmap_blk, dataBitmap);
-        if (ret != 0) {return -1;}
+        if (ret < 0) {return -1;}
         set_bitmap(dataBitmap , blkno);
         ret = bio_write(SuperBlock.d_bitmap_blk, dataBitmap);
-        if (ret != 0) {return -1;}
+        if (ret < 0) {return -1;}
         
         // Update the inode and write it to disk.
         dir_inode.direct_ptr[blockIndex] = newBlockIndex;
@@ -487,13 +487,13 @@ int tfs_mkfs() {
         
         // Write the superblock block to disk
         ret = bio_write(0, onDiskSuperBlock);
-        if (ret != 0) {return -1;}
+        if (ret < 0) {return -1;}
         
         unsigned char flatBlock[BLOCK_SIZE] = {0};
         
         // Write a blank data bitmap
         ret = bio_write(2, flatBlock);
-        if (ret != 0) {return -1;}
+        if (ret < 0) {return -1;}
         
         // update inode bitmap
         // The first two inodes are used by convention.
@@ -504,7 +504,7 @@ int tfs_mkfs() {
         
         // Write the inode bitmap
         ret = bio_write(1, flatBlock);
-        if (ret != 0) {return -1;}
+        if (ret < 0) {return -1;}
 
 	// update inode for root directory
         struct inode rootInode = {0};
@@ -552,7 +552,7 @@ static void *tfs_init(struct fuse_conn_info *conn) {
                 // and read superblock from disk
                 // Write the super block to global space.
                 ret = bio_read(0, &SuperBlock); 
-                if (ret != 0) {
+                if (ret < 0) {
                         exit(EXIT_FAILURE);
                 }
                 
@@ -629,6 +629,7 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
                 // Read block of directory entries from the disk
                 unsigned char dirBlock[BLOCK_SIZE] = {0};
                 ret = bio_read(getIno.direct_ptr[blockIndex], dirBlock);
+                if (ret < 0) {return -1;}
                 
                 // Read all the directory entries in the block.
                 for (int i = 0; i < directoryEntryCount; i++) {
@@ -714,10 +715,10 @@ static int tfs_mkdir(const char *path, mode_t mode) {
         // Update the inode bitmap to show that inode is used.
         unsigned char inodeBitmap[BLOCK_SIZE] = {0};
         ret = bio_read(SuperBlock.i_bitmap_blk, inodeBitmap);
-        if (ret != 0) {return -1;}
+        if (ret < 0) {return -1;}
         set_bitmap(inodeBitmap, availableInode);
         ret = bio_write(SuperBlock.i_bitmap_blk, inodeBitmap);
-        if (ret != 0) {return -1;}
+        if (ret < 0) {return -1;}
 
 	return 0;
 }
@@ -747,7 +748,7 @@ static int tfs_rmdir(const char *path) {
         
         unsigned char blockBitmap[BLOCK_SIZE] = {0};
         ret = bio_read(SuperBlock.d_bitmap_blk, &blockBitmap);
-        if (ret != 0) {return -1;}
+        if (ret < 0) {return -1;}
         for (int i = 0; i < 16; i++) {
                 // Check if block pointer is valid
                 if (targetDir.direct_ptr[i] != 0) {
@@ -758,16 +759,17 @@ static int tfs_rmdir(const char *path) {
         // Commit changes to the data bitmap. Note that we might have anywhere
         // from 0 to 16 changes.
         ret = bio_write(SuperBlock.d_bitmap_blk, &blockBitmap);
-        if (ret != 0) {return -1;}
+        if (ret < 0) {return -1;}
         
 	// Step 4: Clear inode bitmap and its data block
         // Note that we don't overwrite the inode data since creating a new inode 
         // always zeroes it out anyway. 
         unsigned char inodeBitmap[BLOCK_SIZE] = {0};
         ret = bio_read(SuperBlock.i_bitmap_blk, &inodeBitmap);
-        if (ret != 0) {return -1;}
+        if (ret < 0) {return -1;}
         unset_bitmap(inodeBitmap, targetDir.ino);
         ret = bio_write(SuperBlock.i_bitmap_blk, &inodeBitmap);
+        if (ret < 0) {return -1;}
         
 	// Step 5: Call get_node_by_path() to get inode of parent directory
         struct inode parentDir = {0};
