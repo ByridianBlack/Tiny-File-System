@@ -679,18 +679,60 @@ static int tfs_mkdir(const char *path, mode_t mode) {
 }
 
 static int tfs_rmdir(const char *path) {
-
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
+        // Create a copy of the path since dirname() and basename() can alter path.
+        char dir[4096] = {0};         // Max path size if 4096 in linux
+        strncpy(dir, path, 4095);     // Copy at most the first 4095 bytes
+        char *dirName = dirname(dir);
+        
+        char base[4096] = {0};
+        strncpy(base, path, 4095);
+        char *baseName = basename(base);
+        
+        // Max length filename is 255 bytes.
+        int name_len = strnlen(baseName, 255) + 1;
+        
+        int ret = 0;
 
 	// Step 2: Call get_node_by_path() to get inode of target directory
+        struct inode targetDir = {0};
+        ret = get_node_by_path(path, ROOT_INODE, &targetDir);
+        if (ret != 0) {return -1;} // If directory can't be reached or doesn't exist.
 
 	// Step 3: Clear data block bitmap of target directory
-
+        
+        unsigned char blockBitmap[BLOCK_SIZE] = {0};
+        ret = bio_read(SuperBlock.d_bitmap_blk, &blockBitmap);
+        if (ret != 0) {return -1;}
+        for (int i = 0; i < 16; i++) {
+                // Check if block pointer is valid
+                if (targetDir.direct_ptr[i] != 0) {
+                        // If yes, we delete the block.
+                        unset_bitmap(blockBitmap, targetDir.direct_ptr[i]);
+                }
+        }
+        // Commit changes to the data bitmap. Note that we might have anywhere
+        // from 0 to 16 changes.
+        ret = bio_write(SuperBlock.d_bitmap_blk, &blockBitmap);
+        if (ret != 0) {return -1;}
+        
 	// Step 4: Clear inode bitmap and its data block
-
+        // Note that we don't overwrite the inode data since creating a new inode 
+        // always zeroes it out anyway. 
+        unsigned char inodeBitmap[BLOCK_SIZE] = {0};
+        ret = bio_read(SuperBlock.i_bitmap_blk, &inodeBitmap);
+        if (ret != 0) {return -1;}
+        unset_bitmap(inodeBitmap, targetDir.ino);
+        ret = bio_write(SuperBlock.i_bitmap_blk, &inodeBitmap);
+        
 	// Step 5: Call get_node_by_path() to get inode of parent directory
+        struct inode parentDir = {0};
+        ret = get_node_by_path(dirName, ROOT_INODE, &parentDir);
+        if (ret != 0) {return -1;}
 
 	// Step 6: Call dir_remove() to remove directory entry of target directory in its parent directory
+        ret = dir_remove(parentDir, baseName, name_len);
+        if (ret != 0) {return -1;}
 
 	return 0;
 }
