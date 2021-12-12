@@ -331,8 +331,17 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
         }
         
         // Allocate a new block to the directory
-        int newBlockIndex = SuperBlock.d_start_blk + get_avail_blkno();
+        int blkno = get_avail_blkno();
+        int newBlockIndex = SuperBlock.d_start_blk + blkno;
         unsigned char newBlock[BLOCK_SIZE] = {0};
+        
+        // Update bitmap to show that block is used.
+        unsigned char dataBitmap[BLOCK_SIZE] = {0};
+        ret = bio_read(SuperBlock.d_bitmap_blk, dataBitmap);
+        if (ret != 0) {return -1;}
+        set_bitmap(dataBitmap , blkno);
+        ret = bio_write(SuperBlock.d_bitmap_blk, dataBitmap);
+        if (ret != 0) {return -1;}
         
         // Update the inode and write it to disk.
         dir_inode.direct_ptr[blockIndex] = newBlockIndex;
@@ -596,19 +605,75 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 
 
 static int tfs_mkdir(const char *path, mode_t mode) {
-
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
 
-	// Step 2: Call get_node_by_path() to get inode of parent directory
-
+        // Create a copy of the path since dirname() and basename() can alter path.
+        char dir[4096] = {0};         // Max path size if 4096 in linux
+        strncpy(dir, path, 4095);     // Copy at most the first 4095 bytes
+        char *dirName = dirname(dir);
+        
+        char base[4096] = {0};
+        strncpy(base, path, 4095);
+        char *baseName = basename(base);
+        
+        // Max length filename is 255 bytes.
+        int name_len = strnlen(baseName, 255) + 1;
+        
+        int ret = 0;
+	
+        // Step 2: Call get_node_by_path() to get inode of parent directory
+        struct inode parentInode = {0};
+        ret = get_node_by_path(dirName, ROOT_INODE, &parentInode);
+        if (ret != 0) {return -1;}
+        
+        // Check that the directory doesn't already exist
+        struct dirent dummy = {0};
+        ret = dir_find(parentInode.ino, baseName, name_len, &dummy);
+        if (ret == 0) {return -1;} // Name found
+        
 	// Step 3: Call get_avail_ino() to get an available inode number
-
+        int availableInode = get_avail_ino();
+        if (availableInode == -1) {return -1;}
+        
 	// Step 4: Call dir_add() to add directory entry of target directory to parent directory
+        ret = dir_add(parentInode, availableInode, baseName, name_len);
+        if (ret != 0) {return -1;}
 
 	// Step 5: Update inode for target directory
+        struct inode newInode = {0};
+        newInode.ino   = availableInode;
+        newInode.valid = 1;
+        newInode.size  = BLOCK_SIZE;
+        newInode.type  = DIRECTORY;
+        newInode.link  = 2;
+        memset(newInode.direct_ptr, 0, sizeof(int) * 16);       // Initialize the direct pointers to NULL 
+        memset(newInode.indirect_ptr, 0, sizeof(int) * 8);      // Initialize the indirect pointers to NULL
+        newInode.vstat.st_ino     = availableInode;
+        newInode.vstat.st_mode    = mode;
+        newInode.vstat.st_uid     = getuid();
+        newInode.vstat.st_gid     = getgid();
+        newInode.vstat.st_size    = BLOCK_SIZE;
+        newInode.vstat.st_blksize = BLOCK_SIZE;
+        newInode.vstat.st_atime   = time(NULL);
+        newInode.vstat.st_mtime   = time(NULL);
+        newInode.vstat.st_ctime   = time(NULL);
 
 	// Step 6: Call writei() to write inode to disk
-	
+        // Write the new inode to the disk
+	ret = writei(availableInode, &newInode);
+        if (ret != 0) {return -1;}
+        
+        // Write the inode of the base directory to disk.
+        ret = writei(parentInode.ino, &parentInode);
+        if (ret != 0) {return -1;}
+        
+        // Update the inode bitmap to show that inode is used.
+        unsigned char inodeBitmap[BLOCK_SIZE] = {0};
+        ret = bio_read(SuperBlock.i_bitmap_blk, inodeBitmap);
+        if (ret != 0) {return -1;}
+        set_bitmap(inodeBitmap, availableInode);
+        ret = bio_write(SuperBlock.i_bitmap_blk, inodeBitmap);
+        if (ret != 0) {return -1;}
 
 	return 0;
 }
