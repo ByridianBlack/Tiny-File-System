@@ -532,7 +532,7 @@ static int tfs_getattr(const char *path, struct stat *stbuf) {
         if (ret != 0) {return -1;}
 
 	// Step 2: fill attribute of file into stbuf from inode
-        memcpy(stbuf, getIno->vstat, sizeof(struct stat));
+        memcpy(stbuf, &(getIno.vstat), sizeof(struct stat));
 
         /* stbuf->st_mode   = S_IFDIR | 0755;
            stbuf->st_nlink  = 2;
@@ -553,16 +553,44 @@ static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
 
 	// Step 2: If not find, return -1
         // It seems that all this function does is return 0 or -1 depending on
-        // whether the path is valid or not. 
+        // whether or not the path is valid. 
         return ret;
 }
 
 static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
 
 	// Step 1: Call get_node_by_path() to get inode from path
+        int ret = 0;
+        struct inode getIno = {0};
+        int directoryEntryCount = BLOCK_SIZE / sizeof(struct dirent);
+        
+        // We assume that the path is absolute since no root is provided
+        ret = get_node_by_path(path, ROOT_INODE, &getIno);
+        if (ret != 0) {return -1;}
 
 	// Step 2: Read directory entries from its data blocks, and copy them to filler
-
+        for (int blockIndex = 0; blockIndex < 16; blockIndex++) {
+                // Means that the block hasn't been allocated
+                if (getIno.direct_ptr[blockIndex] == 0) break;
+                
+                // Read block of directory entries from the disk
+                unsigned char dirBlock[BLOCK_SIZE] = {0};
+                ret = bio_read(getIno.direct_ptr[blockIndex], dirBlock);
+                
+                // Read all the directory entries in the block.
+                for (int i = 0; i < directoryEntryCount; i++) {
+                        struct dirent *directoryEntry = (struct dirent *) (dirBlock + (i * sizeof(struct dirent)));
+                        
+                        // Check that directory entry is valid (wasn't deleted)
+                        if (directoryEntry->valid == 1) {
+                                ret = filler(buffer, directoryEntry->name, NULL, 0);
+                                // Some documentation said to return 0 if filler doesn't return 0.
+                                if (ret != 0) {return 0;}
+                        }                                
+                }
+        }
+        
+        // Finished reading all the directory entries in all the blocks. 
 	return 0;
 }
 
