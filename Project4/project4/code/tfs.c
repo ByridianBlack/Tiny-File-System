@@ -57,54 +57,7 @@ void SuperBlockInit(){
 	SuperBlock.d_bitmap_blk = 2;
         SuperBlock.i_start_blk = 3;  // START OF INODE BLOCKS
 	SuperBlock.d_start_blk = 67; // START OF THE DATA BLOCKS
-
-	
 }
-
-/*
-void writeDataBlockBitMapInit(){
-        for(int i = SuperBlock.d_bitmap_blk; i < SuperBlock.i_bitmap_blk; i++){
-                bio_write(i, (void*)&DataBitMap);
-        }
-}
-
-void writeInodeBitMapInit(){
-        bio_write(SuperBlock.i_bitmap_blk, (void*)&INodeBitMap[MAX_INUM]);
-}
-
-
-void writeInodeTableInit(){
-
-	signed long accum = 0;
-	int ino = 0;
-	for(int i = SuperBlock.i_start_blk; i < SuperBlock.d_start_blk; i++){
-
-		INodeTable = malloc(sizeof(struct inode) * 16);
-
-		for(int j = 0; i < 16; j++){
-			INodeTable->ino = ino+1;
-			if(i == 1 || i == 2){
-				INodeTable->valid = -1;
-				if(i == 2){
-					INodeTable->type = DIRECTORY;
-				}
-			}else{
-				INodeTable->valid = 1;
-			}
-			INodeTable->size = -1;
-			INodeTable->link = 0;
-			memset(&(INodeTable->vstat), 0, sizeof(struct stat));
-			memset(&(INodeTable->direct_ptr), 0, sizeof(int) * 16);
-			memset(&(INodeTable->indirect_ptr), 0, sizeof(int) * 8);
-			ino++;
-		}
-
-		bio_write(i, (void*)&INodeTable);
-		free(INodeTable);
-	}
-
-}
-*/
 
 // Declare your in-memory data structures here
 /*
@@ -799,19 +752,58 @@ static int tfs_releasedir(const char *path, struct fuse_file_info *fi) {
 }
 
 static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
-
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
+        // Create a copy of the path since dirname() and basename() can alter path.
+        char dir[4096] = {0};         // Max path size if 4096 in linux
+        strncpy(dir, path, 4095);     // Copy at most the first 4095 bytes
+        char *dirName = dirname(dir);
+        
+        char base[4096] = {0};
+        strncpy(base, path, 4095);
+        char *baseName = basename(base);
+        
+        // Max length filename is 255 bytes.
+        int name_len = strnlen(baseName, 255) + 1;
+        
+        int ret = 0;
 
 	// Step 2: Call get_node_by_path() to get inode of parent directory
+        struct inode parentInode = {0};
+        ret = get_node_by_path(dirName, ROOT_INODE, &parentInode);
+        if (ret != 0) {return -1;}
 
 	// Step 3: Call get_avail_ino() to get an available inode number
+        int newIno = get_avail_ino();
+        if (newIno < 0) {return -1;}
 
 	// Step 4: Call dir_add() to add directory entry of target file to parent directory
+        ret = dir_add(parentInode, newIno, baseName, name_len);
+        if (ret != 0) {return -1;}
 
 	// Step 5: Update inode for target file
+        struct inode newInode = {0};
+        newInode.ino   = newIno;
+        newInode.valid = 1;
+        newInode.size  = 0;
+        newInode.type  = FILE;
+        newInode.link  = 1;
+        memset(newInode.direct_ptr, 0, sizeof(int) * 16);       // Initialize the direct pointers to NULL 
+        memset(newInode.indirect_ptr, 0, sizeof(int) * 8);      // Initialize the indirect pointers to NULL
+        newInode.vstat.st_ino     = newIno;
+        newInode.vstat.st_mode    = S_IFREG | 0600;             // read and write for only the owner
+        newInode.vstat.st_nlink   = 1;
+        newInode.vstat.st_uid     = getuid();
+        newInode.vstat.st_gid     = getgid();
+        newInode.vstat.st_size    = 0;
+        newInode.vstat.st_blksize = BLOCK_SIZE;
+        newInode.vstat.st_atime   = time(NULL);
+        newInode.vstat.st_mtime   = time(NULL);
+        newInode.vstat.st_ctime   = time(NULL);
 
 	// Step 6: Call writei() to write inode to disk
-
+        ret = writei(newIno, &newInode);
+        if (ret != 0) {return -1;}
+        
 	return 0;
 }
 
