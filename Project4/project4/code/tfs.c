@@ -808,7 +808,6 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 }
 
 static int tfs_open(const char *path, struct fuse_file_info *fi) {
-
 	// Step 1: Call get_node_by_path() to get inode from path
         struct inode getInode = {0};
         int ret = get_node_by_path(path, ROOT_INODE, &getInode);
@@ -822,28 +821,257 @@ static int tfs_open(const char *path, struct fuse_file_info *fi) {
 }
 
 static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
-
 	// Step 1: You could call get_node_by_path() to get inode from path
+        struct inode fileInode = {0};
+        int ret = get_node_by_path(path, ROOT_INODE, &fileInode);
+        if (ret != 0) {return -1;}
 
 	// Step 2: Based on size and offset, read its data blocks from disk
-
+        int fileSize = fileInode.size;
+        // If the offset is at or beyond file size, we can't read any bytes.
+        if (offset >= fileSize) {return 0;}
+        
+        int bufferIndex   = 0;    // Keeps track of spot in the buffer.
+        int bytesIterated = 0;    // Keeps track of spot in the file.
+        
 	// Step 3: copy the correct amount of data from offset to buffer
+        
+        // Iterate over all the direct pointers first.
+        for (int i = 0; i < 16; i++) {
+                // Invalid pointer means that block isn't allocated, which means no more
+                // data in the file to read.
+                if (fileInode.direct_ptr[i] == 0) {
+                        return bufferIndex;
+                }
+                
+                bytesIterated += BLOCK_SIZE;
+                
+                // Nothing from this block should be read.
+                if (bytesIterated <= offset) {
+                        continue;
+                
+                // Blocks needs to be either partially or completely read.
+                } else {
+                        // Read the block from the disk
+                        unsigned char dataBlock[BLOCK_SIZE] = {0};
+                        ret = bio_read(fileInode.direct_ptr[i], dataBlock);
+                        if (ret < 0) {return -1;}
+                        
+                        // Read the entire block.
+                        if (bytesIterated <= offset + size) {
+                                memcpy(buffer + bufferIndex, dataBlock, BLOCK_SIZE);
+                                offset      += BLOCK_SIZE;
+                                size        -= BLOCK_SIZE;
+                                bufferIndex += BLOCK_SIZE;
+                        
+                        // Partially read the block
+                        } else {
+                                int startReadingFrom  = offset % BLOCK_SIZE;
+                                int readThisManyBytes = size % BLOCK_SIZE;
+                                
+                                memcpy(buffer + bufferIndex, dataBlock + startReadingFrom, readThisManyBytes);
+                                offset      += readThisManyBytes;
+                                size        -= readThisManyBytes;
+                                bufferIndex += readThisManyBytes;
+                        }
+                }
+                
+                // Ending conditions
+                if (size == 0 || offset >= fileSize || bytesIterated >= fileSize) {
+                        // Return the number of bytes written.
+                        return bufferIndex;
+                }
+        }
+        
+        // Iterate over all indirect pointers.
+        for (int i = 0; i < 8; i++) {
+                // Invalid pointer means that block isn't allocated, which means no more
+                // data in the file to read.
+                if (fileInode.indirect_ptr[i] == 0) {
+                        return bufferIndex;
+                }
+                
+                // Read the indirect block from disk
+                unsigned char indirectBlock[BLOCK_SIZE] = {0};
+                ret = bio_read(fileInode.indirect_ptr[i], indirectBlock);
+                if (ret < 0) {return -1;}
+                
+                int pointerCount = BLOCK_SIZE / sizeof(int);
+                
+                // Iterate over all block pointers inside the indirect block.
+                for (int j = 0; j < pointerCount; j++) {
+                        
+                        // Cast the indirectBlock into an array of integers.
+                        int pointer = ((int *) indirectBlock)[j];
+                        
+                        // Pointers are allocated in order. If pointer is invalid,
+                        // we are at the end of the file.
+                        if (pointer == 0) {
+                                return bufferIndex;
+                        }
+                        
+                        bytesIterated += BLOCK_SIZE;
+                
+                        // Nothing from this block should be read.
+                        if (bytesIterated <= offset) {
+                                continue;
+                        
+                        // Blocks needs to be either partially or completely read.
+                        } else {
+                                // Read the block from the disk
+                                unsigned char dataBlock[BLOCK_SIZE] = {0};
+                                ret = bio_read(pointer, dataBlock);
+                                if (ret < 0) {return -1;}
+                                
+                                // Read the entire block.
+                                if (bytesIterated <= offset + size) {
+                                        memcpy(buffer + bufferIndex, dataBlock, BLOCK_SIZE);
+                                        offset      += BLOCK_SIZE;
+                                        size        -= BLOCK_SIZE;
+                                        bufferIndex += BLOCK_SIZE;
+                                
+                                // Partially read the block
+                                } else {
+                                        int startReadingFrom  = offset % BLOCK_SIZE;
+                                        int readThisManyBytes = size % BLOCK_SIZE;
+                                        
+                                        memcpy(buffer + bufferIndex, dataBlock + startReadingFrom, readThisManyBytes);
+                                        offset      += readThisManyBytes;
+                                        size        -= readThisManyBytes;
+                                        bufferIndex += readThisManyBytes;
+                                }
+                        }
+                        
+                        // Ending conditions
+                        if (size == 0 || offset >= fileSize || bytesIterated >= fileSize) {
+                                // Return the number of bytes written.
+                                return bufferIndex;
+                        }
+                }
+        }
 
 	// Note: this function should return the amount of bytes you copied to buffer
-	return 0;
+	return bufferIndex;
 }
 
 static int tfs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
 	// Step 1: You could call get_node_by_path() to get inode from path
+        struct inode fileInode = {0};
+        int ret = get_node_by_path(path, ROOT_INODE, &fileInode);
+        if (ret != 0) {return -1;}
 
 	// Step 2: Based on size and offset, read its data blocks from disk
-
+        int fileSize = fileInode.size;
+        int newSize = ((fileSize > (offset + size)) ? fileSize : (offset + size));
+        // If the offset is beyond the file size, we would need to write
+        // more than size bytes (pad zeroes). We can't do this.
+        if (offset > fileSize) {return 0;}
+        
+        int bufferIndex   = 0;    // Keeps track of spot in the buffer.
+        int bytesIterated = 0;    // Keeps track of spot in the file.
+        
 	// Step 3: Write the correct amount of data from offset to disk
-
-	// Step 4: Update the inode info and write it to disk
+        
+        // Iterate over all the direct pointers first.
+        for (int i = 0; i < 16; i++) {
+                // Invalid pointer means that block isn't allocated. 
+                // We need to allocate block and write to it.
+                if (fileInode.direct_ptr[i] == 0) {
+                        int blkno = get_avail_blkno();
+                        if (blkno < 0) {return -1;}
+                        
+                        // Update the inode.
+                        fileInode.direct_ptr[i] = SuperBlock.d_start_blk + blkno;
+                        
+                        // Create a new block.
+                        unsigned char dataBlock[BLOCK_SIZE] = {0};
+                        
+                        // Write an entire block of data.
+                        if (size > BLOCK_SIZE) {
+                                // Copy data to block and write to disk.
+                                memcpy(dataBlock, buffer + bufferIndex, BLOCK_SIZE);
+                                ret = bio_write(fileInode.direct_ptr[i], dataBlock);
+                                if (ret < 0) {return -1;}
+                                
+                                offset      += BLOCK_SIZE;
+                                size        -= BLOCK_SIZE;
+                                bufferIndex += BLOCK_SIZE;
+                                continue;
+                        
+                        // Write a partial block of data.
+                        // Partial block means no more data to write.
+                        } else {
+                                // Copy data to block and write to disk.
+                                int writeThisManyBytes = size;
+                                memcpy(dataBlock, buffer + bufferIndex, writeThisManyBytes);
+                                ret = bio_write(fileInode.direct_ptr[i], dataBlock);
+                                if (ret < 0) {return -1;}
+                                
+                                offset      += writeThisManyBytes;
+                                size        -= writeThisManyBytes;
+                                bufferIndex += writeThisManyBytes;
+                                
+                                break;
+                        }  
+                }
+                
+                bytesIterated += BLOCK_SIZE;
+                // This block shouldn't be written to.
+                if (bytesIterated <= offset) {
+                        continue;
+                        
+                // Blocks needs to be either partially or completely writen.
+                } else {
+                        // Read the block from the disk
+                        unsigned char dataBlock[BLOCK_SIZE] = {0};
+                        ret = bio_read(fileInode.direct_ptr[i], dataBlock);
+                        if (ret < 0) {return -1;}
+                        
+                        // Write the entire block.
+                        if (bytesIterated <= offset + size) {
+                                memcpy(dataBlock, buffer + bufferIndex, BLOCK_SIZE);
+                                offset      += BLOCK_SIZE;
+                                size        -= BLOCK_SIZE;
+                                bufferIndex += BLOCK_SIZE;
+                        
+                        // Partially write the block
+                        } else {
+                                int startWritingTo = offset % BLOCK_SIZE;
+                                int writeThisManyBytes = size % BLOCK_SIZE;
+                                
+                                memcpy(dataBlock + startWritingTo, buffer + bufferIndex, writeThisManyBytes);
+                                offset      += writeThisManyBytes;
+                                size        -= writeThisManyBytes;
+                                bufferIndex += writeThisManyBytes;
+                        }
+                        
+                        // Write the block back to disk
+                        ret = bio_write(fileInode.direct_ptr[i], dataBlock);
+                        if (ret < 0) {return -1;}
+                        
+                }
+                
+                // Ending conditions when no more bytes are left to write.
+                if (size == 0) {
+                        break;
+                }
+        }
+        
+        // Step 4: Update the inode info and write it to disk
+        // If we've written all the data, update the inode and return.
+        if (size == 0) {
+                fileInode.size          = newSize;
+                fileInode.vstat.st_size = newSize;
+                fileInode.vstat.st_atime = time(NULL);
+                fileInode.vstat.st_mtime = time(NULL);
+                                
+                ret = writei(fileInode.ino, &fileInode);
+                return ((ret != 0) ? -1 : bufferIndex);
+                
+        }
 
 	// Note: this function should return the amount of bytes you write to disk
-	return size;
+	return bufferIndex;
 }
 
 static int tfs_unlink(const char *path) {
