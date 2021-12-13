@@ -1210,7 +1210,7 @@ static int tfs_unlink(const char *path) {
         for (int i = 0; i < 16; i++) {
                 if (targetInode.direct_ptr[i] == 0) {break;}
                 
-                unset_bitmap(blockBitmap, targetInode.direct_ptr[i]);
+                unset_bitmap(blockBitmap, targetInode.direct_ptr[i] - SuperBlock.d_start_blk);
         }
         
         // Unset all the indirect pointers.
@@ -1227,8 +1227,10 @@ static int tfs_unlink(const char *path) {
                         
                         if (pointer == 0) {break;}
                         
-                        unset_bitmap(blockBitmap, pointer);
+                        unset_bitmap(blockBitmap, pointer - SuperBlock.d_start_blk);
                 }
+                
+                unset_bitmap(blockBitmap, targetInode.indirect_ptr[i] - SuperBlock.d_start_blk);
         }
         
         // Commit block bitmap back to the disk.

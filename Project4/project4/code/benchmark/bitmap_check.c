@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
 
 	bitmap = malloc(BLOCKSIZE);
 
-	diskfile = open("DISKFILE", O_RDWR, S_IRUSR | S_IWUSR);
+	diskfile = open("/common/home/pjk151/code/DISKFILE", O_RDWR, S_IRUSR | S_IWUSR);
 	if (diskfile < 0) {
 		perror("disk_open failed");
 		return -1;
