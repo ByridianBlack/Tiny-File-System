@@ -661,10 +661,6 @@ static int tfs_mkdir(const char *path, mode_t mode) {
         newInode.vstat.st_ctime   = time(NULL);
 
 	// Step 6: Call writei() to write inode to disk
-        // Write the inode of the base directory to disk.
-        ret = writei(parentInode.ino, &parentInode);
-        if (ret != 0) {return -1;}
-        
         // Write the new inode to the disk
 	ret = writei(availableInode, &newInode);
         if (ret != 0) {return -1;}
