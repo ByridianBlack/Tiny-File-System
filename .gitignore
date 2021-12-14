@@ -1,6 +1,14 @@
 *
 !.gitignore
 !Project4
+!Report.pdf
+!photos
+!photos/bitmap_test.png
+!photos/bitmap_test2.png
+!photos/simple_test1.png
+!photos/simple_test2.png
+!photos/test_case.png
+!pjk151.tar.gz
 !Project4/project4
 !Project4/project4.zip
 !Project4/project4.pdf

@@ -27,14 +27,10 @@
 #include "tfs.h"
 
 #define FILE 1
-#define DIRECTORY 2 // Directory
+#define DIRECTORY 2 
 char diskfile_path[PATH_MAX];
 
 struct superblock SuperBlock;
-
-//bitmap_t DataBitMap[MAX_DNUM/4] = {'0'};
-//bitmap_t INodeBitMap;
-//struct inode* INodeTable;
 
 // Below are Paul's macros and globals
 #define ROOT_INODE 2
